@@ -17,7 +17,7 @@ import {
   cardClass,
   inputClass,
 } from './components'
-import { AvailabilityCalendar } from './AvailabilityCalendar'
+import { AvailabilityCalendar, type CalendarShift } from './AvailabilityCalendar'
 import { calendarDates } from './time'
 import {
   CITIES,
@@ -128,6 +128,14 @@ export function SeekerApp() {
       {tab === 'cal' && (
         <CalendarPane
           seeker={seeker}
+          shifts={shifts.map((r) => ({
+            id: r.id,
+            date: r.date,
+            title: r.title,
+            company: store.employers.find((e) => e.id === r.employerId)?.company ?? r.city,
+            startTime: r.startTime,
+            endTime: r.endTime,
+          }))}
           onRecurring={(day, slots) => store.setRecurring(seeker.id, day, slots)}
           onHours={(date, hours) => store.setDayHours(seeker.id, date, hours)}
           onApplyWeek={() => store.applyRecurringHours(seeker.id, calendarDates(6).filter((d) => d >= isoDate(0)))}
@@ -147,8 +155,8 @@ export function SeekerApp() {
           seeker={seeker}
           onStatus={(id, status) => {
             store.setRequestStatus(id, status)
-            pingToast(status === 'accepted' ? 'Shift bevestigd — check je shiften op home' : 'Aanvraag afgewezen')
-            if (status === 'accepted') setTab('home')
+            pingToast(status === 'accepted' ? 'Shift bevestigd — hij staat in je kalender' : 'Aanvraag afgewezen')
+            if (status === 'accepted') setTab('cal')
           }}
         />
       )}
@@ -176,7 +184,7 @@ function Shell({
 }) {
   const items: { id: Tab; label: string; icon: 'home' | 'cal' | 'brief' | 'inbox' | 'user' }[] = [
     { id: 'home', label: 'Home', icon: 'home' },
-    { id: 'cal', label: 'Uren', icon: 'cal' },
+    { id: 'cal', label: 'Kalender', icon: 'cal' },
     { id: 'jobs', label: 'Jobs', icon: 'brief' },
     { id: 'inbox', label: 'Inbox', icon: 'inbox' },
     { id: 'profile', label: 'Profiel', icon: 'user' },
@@ -329,7 +337,7 @@ function Home({
       )}
       <div className="mt-4 flex gap-2">
         <GhostButton onClick={onOpenCal} className="!px-4 !py-2">
-          Uren aanpassen
+          Open kalender
         </GhostButton>
         <GhostButton onClick={onOpenJobs} className="!px-4 !py-2">
           Alle jobs
@@ -458,12 +466,14 @@ function JobCard({
 
 function CalendarPane({
   seeker,
+  shifts,
   onRecurring,
   onHours,
   onApplyWeek,
   onLastMinute,
 }: {
   seeker: Seeker
+  shifts: CalendarShift[]
   onRecurring: (day: Weekday, slots: Slot[]) => void
   onHours: (date: string, hours: DayHours | null) => void
   onApplyWeek: () => void
@@ -473,13 +483,13 @@ function CalendarPane({
     <div>
       <Guide
         pose="point"
-        title="Zet je vrije uren"
-        text="Klik op een dag en kies exact van–tot. Meerdere blokken op één dag mag. Werkgevers zien alleen dagen die je aanduidt."
+        title="Jouw week in één oogopslag"
+        text="Geel is vrij, zwart is een bevestigde job. Tik op een dag om uren te zetten of een shift te bekijken."
       />
-      <h1 className="text-3xl font-semibold tracking-tight">Jouw vrije uren</h1>
+      <h1 className="text-3xl font-semibold tracking-tight">Jouw kalender</h1>
       <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">
-        Klik op een dag en zet exact wanneer je kunt werken — bijvoorbeeld 14:30 tot 22:00.
-        Je mag meerdere blokken op één dag zetten.
+        Zie in één keer wanneer je nog vrij bent en wat al gepland staat. Klik op een dag om
+        uren aan te passen of een bevestigde shift te bekijken.
       </p>
       <label className={`${cardClass} mt-8 flex items-center justify-between p-5`}>
         <div>
@@ -497,9 +507,16 @@ function CalendarPane({
         </button>
       </label>
 
-      <h2 className="mt-10 text-lg font-semibold tracking-tight">Kalender</h2>
-      <p className="mb-4 mt-1 text-sm text-muted">Alleen dagen die je aanduidt (of die in je vaste week staan) zijn zichtbaar voor werkgevers.</p>
-      <AvailabilityCalendar seeker={seeker} onChange={onHours} onApplyWeek={onApplyWeek} />
+      <h2 className="mt-10 text-lg font-semibold tracking-tight">Overzicht</h2>
+      <p className="mb-4 mt-1 text-sm text-muted">
+        Gele dagen zijn zichtbaar voor werkgevers. Zwarte dagen zijn jobs die je al hebt toegezegd.
+      </p>
+      <AvailabilityCalendar
+        seeker={seeker}
+        shifts={shifts}
+        onChange={onHours}
+        onApplyWeek={onApplyWeek}
+      />
 
       <h2 className="mt-10 text-lg font-semibold tracking-tight">Vaste week</h2>
       <p className="mb-4 mt-1 text-sm text-muted">

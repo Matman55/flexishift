@@ -16,12 +16,23 @@ import {
 } from './time'
 import type { DayHours, Seeker, TimeRange } from './types'
 
+export type CalendarShift = {
+  id: string
+  date: string
+  title: string
+  company: string
+  startTime?: string
+  endTime?: string
+}
+
 export function AvailabilityCalendar({
   seeker,
+  shifts = [],
   onChange,
   onApplyWeek,
 }: {
   seeker: Seeker
+  shifts?: CalendarShift[]
   onChange: (date: string, hours: DayHours | null) => void
   onApplyWeek: () => void
 }) {
@@ -31,72 +42,161 @@ export function AvailabilityCalendar({
   const selectedHours = hoursOnDate(seeker, selected)
   const custom = Object.prototype.hasOwnProperty.call(seeker.hours ?? {}, selected)
   const past = isPastDate(selected)
+  const byDate = useMemo(() => {
+    const map: Record<string, CalendarShift[]> = {}
+    for (const s of shifts) {
+      ;(map[s.date] ??= []).push(s)
+    }
+    return map
+  }, [shifts])
+  const selectedShifts = byDate[selected] ?? []
+  const monthTitle = useMemo(() => {
+    const first = new Date(dates[0] + 'T12:00:00')
+    const last = new Date(dates[dates.length - 1] + 'T12:00:00')
+    const a = first.toLocaleDateString('nl-BE', { month: 'long', year: 'numeric' })
+    const b = last.toLocaleDateString('nl-BE', { month: 'long', year: 'numeric' })
+    return a === b ? a : `${a} – ${b}`
+  }, [dates])
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-      <div>
-        <div className="mb-3 grid grid-cols-7 text-center text-[11px] font-bold uppercase tracking-wide text-muted">
-          {(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const).map((d) => (
-            <div key={d}>{WEEKDAY_META[d].short}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1.5">
-          {dates.map((date) => {
-            const hours = hoursOnDate(seeker, date)
-            const open = isDayOpen(hours)
-            const isSel = date === selected
-            const isToday = date === today
-            const disabled = isPastDate(date)
-            return (
-              <button
-                key={date}
-                type="button"
-                disabled={disabled}
-                onClick={() => setSelected(date)}
-                className={`min-h-[76px] rounded-xl border p-1.5 text-left transition ${
-                  disabled
-                    ? 'cursor-not-allowed border-transparent bg-zinc-50 text-zinc-300'
-                    : isSel
-                      ? 'border-ink bg-terra/40 shadow-sm'
-                      : open
-                        ? 'border-terra/50 bg-terra/15 hover:bg-terra/25'
-                        : 'border-line bg-white hover:border-zinc-300'
-                }`}
-              >
-                <div className={`text-xs font-bold ${isToday && !disabled ? 'text-ink' : ''}`}>
-                  {Number(date.slice(8))}
-                </div>
-                {open && !disabled && (
-                  <div className="mt-1 line-clamp-3 text-[10px] font-semibold leading-tight text-ink/80">
-                    {hours.flexible ? 'Flexibel' : hours.ranges.map((r) => formatRange(r)).join('\n')}
-                  </div>
-                )}
-              </button>
-            )
-          })}
+    <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-base font-semibold capitalize tracking-tight">{monthTitle}</h3>
+        <div className="flex flex-wrap gap-3 text-[11px] font-medium text-muted">
+          <Legend swatch="bg-terra/30 border-terra/50" label="Vrij" />
+          <Legend swatch="bg-ink border-ink" label="Gepland" />
+          <Legend swatch="bg-terra/20 border-ink" label="Vrij + job" />
+          <Legend swatch="bg-white border-line" label="Niet vrij" />
         </div>
       </div>
 
-      <div className={`${cardClass} p-5`}>
-        <div className="text-xs font-medium uppercase tracking-wide text-muted">
-          {WEEKDAY_META[weekdayFromIso(selected)].long}
+      <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <div>
+          <div className="mb-2 grid grid-cols-7 text-center text-[11px] font-bold uppercase tracking-wide text-muted">
+            {(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const).map((d) => (
+              <div key={d}>{WEEKDAY_META[d].short}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1.5">
+            {dates.map((date) => {
+              const hours = hoursOnDate(seeker, date)
+              const open = isDayOpen(hours)
+              const dayShifts = byDate[date] ?? []
+              const booked = dayShifts.length > 0
+              const isSel = date === selected
+              const isToday = date === today
+              const disabled = isPastDate(date)
+              return (
+                <button
+                  key={date}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setSelected(date)}
+                  className={`min-h-[92px] rounded-xl border p-1.5 text-left transition ${
+                    disabled
+                      ? 'cursor-not-allowed border-transparent bg-zinc-50 text-zinc-300'
+                      : isSel
+                        ? booked && !open
+                          ? 'border-ink bg-ink text-white shadow-sm ring-2 ring-terra'
+                          : 'border-ink bg-terra/45 shadow-sm ring-2 ring-ink/20'
+                        : booked && open
+                          ? 'border-ink bg-terra/20 hover:bg-terra/30'
+                          : booked
+                            ? 'border-ink bg-ink text-white hover:bg-zinc-800'
+                            : open
+                              ? 'border-terra/50 bg-terra/20 hover:bg-terra/30'
+                              : 'border-line bg-white hover:border-zinc-300'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-1">
+                    <span className="text-sm font-bold">
+                      {Number(date.slice(8))}
+                    </span>
+                    {isToday && !disabled && (
+                      <span className={`text-[9px] font-semibold uppercase ${booked && !open && !isSel ? 'text-terra' : 'text-muted'}`}>
+                        nu
+                      </span>
+                    )}
+                  </div>
+                  {!disabled && booked && (
+                    <div className={`mt-1 line-clamp-2 text-[10px] font-semibold leading-tight ${booked && !open && !isSel ? 'text-terra' : ''}`}>
+                      {dayShifts[0].startTime
+                        ? `${dayShifts[0].startTime} ${dayShifts[0].title}`
+                        : dayShifts[0].title}
+                    </div>
+                  )}
+                  {!disabled && open && (
+                    <div className={`mt-1 line-clamp-2 text-[10px] font-medium leading-tight ${booked ? 'opacity-80' : 'text-ink/80'}`}>
+                      {booked ? 'Nog vrij · ' : ''}
+                      {hours.flexible ? 'flexibel' : hours.ranges.map((r) => formatRange(r)).join(' ')}
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
         </div>
-        <h3 className="text-lg font-bold tracking-tight">{formatDateLong(selected)}</h3>
-        {past ? (
-          <p className="mt-3 text-sm text-muted">Deze dag is al voorbij.</p>
-        ) : (
-          <DayHoursEditor
-            value={selectedHours}
-            custom={custom}
-            onChange={(hours) => onChange(selected, hours)}
-            onReset={() => onChange(selected, null)}
-          />
-        )}
-        <GhostButton onClick={onApplyWeek} className="mt-5 w-full !py-2.5 text-xs">
-          Vaste week toepassen op deze kalender
-        </GhostButton>
+
+        <div className={`${cardClass} p-5`}>
+          <div className="text-xs font-medium uppercase tracking-wide text-muted">
+            {WEEKDAY_META[weekdayFromIso(selected)].long}
+          </div>
+          <h3 className="text-lg font-bold tracking-tight">{formatDateLong(selected)}</h3>
+          {past ? (
+            <p className="mt-3 text-sm text-muted">Deze dag is al voorbij.</p>
+          ) : (
+            <>
+              {selectedShifts.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted">Gepland</div>
+                  {selectedShifts.map((s) => (
+                    <div key={s.id} className="rounded-xl bg-ink px-3 py-2.5 text-white">
+                      <div className="text-[11px] font-medium text-terra">Bevestigde shift</div>
+                      <div className="mt-0.5 font-semibold">{s.title}</div>
+                      <div className="text-sm text-white/70">
+                        {s.company}
+                        {s.startTime ? ` · ${s.startTime}–${s.endTime}` : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className={selectedShifts.length > 0 ? 'mt-5' : ''}>
+                {selectedShifts.length > 0 && (
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+                    Nog vrij die dag
+                  </div>
+                )}
+                <DayHoursEditor
+                  value={selectedHours}
+                  custom={custom}
+                  onChange={(hours) => onChange(selected, hours)}
+                  onReset={() => onChange(selected, null)}
+                />
+              </div>
+            </>
+          )}
+          <GhostButton onClick={onApplyWeek} className="mt-5 w-full !py-2.5 text-xs">
+            Vaste week toepassen op deze kalender
+          </GhostButton>
+        </div>
       </div>
     </div>
+  )
+}
+
+function Legend({
+  swatch,
+  label,
+}: {
+  swatch: string
+  label: string
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`h-3 w-3 rounded-sm border ${swatch}`} />
+      {label}
+    </span>
   )
 }
 
