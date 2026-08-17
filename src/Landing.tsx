@@ -37,7 +37,7 @@ export function Landing({
       <div className="blob pointer-events-none absolute -left-24 top-40 h-64 w-64 bg-zinc-100" />
       <div className="blob-alt pointer-events-none absolute -right-16 top-[520px] h-72 w-72 bg-zinc-100" />
 
-      <header className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+      <header className="relative z-10 mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-5">
         <Logo />
         <nav className="hidden items-center gap-8 text-sm font-medium text-muted md:flex">
           <span className="text-ink after:mt-1 after:block after:h-0.5 after:w-6 after:rounded-full after:bg-terra">
@@ -46,6 +46,14 @@ export function Landing({
           <a href="#hoe" className="hover:text-ink">Hoe het werkt</a>
           <a href="#mensen" className="hover:text-ink">Mensen</a>
         </nav>
+        <div className="flex flex-wrap items-center gap-2">
+          <DarkButton onClick={onDemoSeeker} className="!px-3.5 !py-2 text-xs sm:text-sm">
+            Inloggen als werknemer
+          </DarkButton>
+          <PrimaryButton onClick={onDemoEmployer} className="!px-3.5 !py-2 text-xs sm:text-sm">
+            Inloggen als werkgever
+          </PrimaryButton>
+        </div>
       </header>
 
       <section className="relative z-10 mx-auto grid max-w-6xl items-center gap-10 px-6 pb-16 pt-8 md:grid-cols-2 md:pt-12">
