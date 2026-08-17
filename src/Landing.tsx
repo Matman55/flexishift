@@ -46,7 +46,6 @@ export function Landing({
           <a href="#hoe" className="hover:text-ink">Hoe het werkt</a>
           <a href="#mensen" className="hover:text-ink">Mensen</a>
         </nav>
-        <DarkButton onClick={onDemoSeeker}>Ik zoek werk</DarkButton>
       </header>
 
       <section className="relative z-10 mx-auto grid max-w-6xl items-center gap-10 px-6 pb-16 pt-8 md:grid-cols-2 md:pt-12">
