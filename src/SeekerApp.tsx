@@ -509,7 +509,7 @@ function CalendarPane({
 
       <h2 className="mt-10 text-lg font-semibold tracking-tight">Overzicht</h2>
       <p className="mb-4 mt-1 text-sm text-muted">
-        Gele dagen zijn zichtbaar voor werkgevers. Zwarte dagen zijn jobs die je al hebt toegezegd.
+        Gele dagen zijn vrij. Zwarte dagen hebben een bevestigde job.
       </p>
       <AvailabilityCalendar
         seeker={seeker}

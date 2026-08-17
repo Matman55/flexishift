@@ -75,7 +75,6 @@ export function AvailabilityCalendar({
         <div className="flex flex-wrap gap-3 text-[11px] font-medium text-muted">
           <Legend swatch="bg-terra/30 border-terra/50" label="Vrij" />
           <Legend swatch="bg-ink border-ink" label="Gepland" />
-          <Legend swatch="bg-terra/20 border-ink" label="Vrij + job" />
           <Legend swatch="bg-white border-line" label="Niet vrij" />
         </div>
       </div>
@@ -106,12 +105,10 @@ export function AvailabilityCalendar({
                   className={`min-h-[92px] rounded-xl border p-1.5 text-left transition ${
                     disabled
                       ? 'cursor-not-allowed border-transparent bg-zinc-50 text-zinc-300'
-                      : isSel
-                        ? booked && !open
-                          ? 'border-ink bg-ink text-white shadow-sm ring-2 ring-terra'
-                          : 'border-ink bg-terra/45 shadow-sm ring-2 ring-ink/20'
-                        : booked && open
-                          ? 'border-ink bg-terra/20 hover:bg-terra/30'
+                      : isSel && booked
+                        ? 'border-ink bg-ink text-white shadow-sm ring-2 ring-terra'
+                        : isSel
+                          ? 'border-ink bg-terra/45 shadow-sm ring-2 ring-ink/20'
                           : booked
                             ? 'border-ink bg-ink text-white hover:bg-zinc-800'
                             : open
@@ -124,21 +121,20 @@ export function AvailabilityCalendar({
                       {Number(date.slice(8))}
                     </span>
                     {isToday && !disabled && (
-                      <span className={`text-[9px] font-semibold uppercase ${booked && !open && !isSel ? 'text-terra' : 'text-muted'}`}>
+                      <span className={`text-[9px] font-semibold uppercase ${booked && !isSel ? 'text-terra' : 'text-muted'}`}>
                         nu
                       </span>
                     )}
                   </div>
                   {!disabled && booked && (
-                    <div className={`mt-1 line-clamp-2 text-[10px] font-semibold leading-tight ${booked && !open && !isSel ? 'text-terra' : ''}`}>
+                    <div className={`mt-1 line-clamp-2 text-[10px] font-semibold leading-tight ${!isSel ? 'text-terra' : ''}`}>
                       {dayShifts[0].startTime
                         ? `${dayShifts[0].startTime} ${dayShifts[0].title}`
                         : dayShifts[0].title}
                     </div>
                   )}
-                  {!disabled && open && (
-                    <div className={`mt-1 line-clamp-2 text-[10px] font-medium leading-tight ${booked ? 'opacity-80' : 'text-ink/80'}`}>
-                      {booked ? 'Nog vrij · ' : ''}
+                  {!disabled && open && !booked && (
+                    <div className="mt-1 line-clamp-2 text-[10px] font-medium leading-tight text-ink/80">
                       {hours.flexible ? 'flexibel' : hours.ranges.map((r) => formatRange(r)).join(' ')}
                     </div>
                   )}
