@@ -212,7 +212,7 @@ function Shell({
   return (
     <div className="min-h-dvh md:grid md:grid-cols-[232px_1fr]">
       <aside className="hidden border-r border-line bg-cream md:flex md:flex-col md:px-4 md:py-6">
-        <Logo />
+        <Logo compact />
         <p className="mt-3 px-3 text-xs font-medium text-muted">{company}</p>
         <nav className="mt-8 flex flex-1 flex-col gap-0.5">
           {items.map((it) => (
@@ -240,7 +240,7 @@ function Shell({
       </aside>
       <div className="pb-36 md:pb-24">
         <header className="flex items-center justify-between border-b border-line bg-cream px-6 py-4 md:hidden">
-          <Logo />
+          <Logo compact />
           <button type="button" onClick={onLogout} className="text-sm font-medium text-muted">
             Uit
           </button>
@@ -1020,7 +1020,7 @@ function EmployerOnboarding({ employer }: { employer: Employer }) {
   return (
     <div className="min-h-dvh bg-paper">
       <header className="mx-auto flex max-w-lg items-center justify-between px-6 py-5">
-        <Logo />
+        <Logo compact />
         <button type="button" onClick={store.logout} className="text-sm font-medium text-muted">
           Terug
         </button>

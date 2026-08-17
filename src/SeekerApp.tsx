@@ -184,7 +184,7 @@ function Shell({
   return (
     <div className="min-h-dvh md:grid md:grid-cols-[232px_1fr]">
       <aside className="hidden border-r border-line bg-cream md:flex md:flex-col md:px-4 md:py-6">
-        <Logo />
+        <Logo compact />
         <nav className="mt-8 flex flex-1 flex-col gap-0.5">
           {items.map((it) => (
             <button
@@ -211,7 +211,7 @@ function Shell({
       </aside>
       <div className="pb-36 md:pb-24">
         <header className="flex items-center justify-between border-b border-line bg-cream px-6 py-4 md:hidden">
-          <Logo />
+          <Logo compact />
           <button type="button" onClick={onLogout} className="text-sm font-medium text-muted">
             Uit
           </button>
@@ -985,7 +985,7 @@ function Onboarding({ seeker }: { seeker: Seeker }) {
     <div className="min-h-dvh px-6 py-10">
       <Guide {...onboardTips[step]} />
       <div className="mx-auto max-w-2xl">
-        <Logo />
+        <Logo compact />
         <div className="mt-8 flex gap-2">
           {steps.map((_, i) => (
             <div
