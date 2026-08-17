@@ -74,34 +74,6 @@ export function Landing({
           <div className="absolute inset-0 flex items-end justify-center pb-2">
             <Mascot pose="search" size={300} bob />
           </div>
-          <button
-            type="button"
-            onClick={onDemoSeeker}
-            className="absolute right-0 top-8 flex w-[210px] items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-[0_12px_40px_rgba(17,17,17,0.12)]"
-          >
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-terra">
-              <Icon name="check" className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-bold">Werkzoekende</span>
-              <span className="block text-xs text-muted">Zet je uren klaar</span>
-            </span>
-            <Icon name="chevron" className="h-4 w-4 text-muted" />
-          </button>
-          <button
-            type="button"
-            onClick={onDemoEmployer}
-            className="absolute bottom-16 left-0 flex w-[210px] items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-[0_12px_40px_rgba(17,17,17,0.12)]"
-          >
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-ink text-white">
-              <Icon name="search" className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-bold">Werkgever</span>
-              <span className="block text-xs text-muted">Vind wie écht vrij is</span>
-            </span>
-            <Icon name="chevron" className="h-4 w-4 text-muted" />
-          </button>
         </div>
       </section>
 
