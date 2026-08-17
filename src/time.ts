@@ -179,6 +179,35 @@ export function calendarDates(weeks = 6): string[] {
   })
 }
 
+export type MonthCell = {
+  date: string
+  inMonth: boolean
+}
+
+export function monthGrid(year: number, month: number): MonthCell[] {
+  const first = new Date(year, month, 1, 12, 0, 0, 0)
+  const last = new Date(year, month + 1, 0, 12, 0, 0, 0)
+  const dow = first.getDay()
+  const mondayOffset = dow === 0 ? -6 : 1 - dow
+  const cursor = new Date(first)
+  cursor.setDate(first.getDate() + mondayOffset)
+  const cells: MonthCell[] = []
+  while (true) {
+    cells.push({
+      date: isoFromDate(cursor),
+      inMonth: cursor.getMonth() === month,
+    })
+    if (cursor >= last && cursor.getDay() === 0) break
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return cells
+}
+
+export function shiftYearMonth(year: number, month: number, delta: number): { year: number; month: number } {
+  const d = new Date(year, month + delta, 1, 12, 0, 0, 0)
+  return { year: d.getFullYear(), month: d.getMonth() }
+}
+
 export function isPastDate(iso: string): boolean {
   return iso < isoFromDate(new Date())
 }

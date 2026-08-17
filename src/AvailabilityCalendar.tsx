@@ -1,18 +1,19 @@
 import { useMemo, useState } from 'react'
 import { WEEKDAY_META, formatDateLong, isoDate } from './constants'
-import { cardClass, Chip, GhostButton, PrimaryButton, inputClass } from './components'
+import { cardClass, Chip, GhostButton, Icon, PrimaryButton, inputClass } from './components'
 import { weekdayFromIso } from './data'
 import { hoursOnDate, plannedHoursOnDate } from './match'
 import {
   TIME_OPTIONS,
   TIME_PRESETS,
-  calendarDates,
   emptyDayHours,
   formatDayHours,
   formatRange,
   hasPreset,
   isDayOpen,
   isPastDate,
+  monthGrid,
+  shiftYearMonth,
   togglePreset,
 } from './time'
 import type { DayHours, Seeker, TimeRange } from './types'
@@ -43,10 +44,13 @@ export function AvailabilityCalendar({
   seeker: Seeker
   shifts?: CalendarShift[]
   onChange: (date: string, hours: DayHours | null) => void
-  onApplyWeek: () => void
+  onApplyWeek: (dates: string[]) => void
 }) {
-  const dates = useMemo(() => calendarDates(6), [])
   const today = isoDate(0)
+  const now = new Date()
+  const [year, setYear] = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth())
+  const cells = useMemo(() => monthGrid(year, month), [year, month])
   const [selected, setSelected] = useState(today)
   const selectedHours = plannedHoursOnDate(seeker, selected)
   const custom = Object.prototype.hasOwnProperty.call(seeker.hours ?? {}, selected)
@@ -60,18 +64,50 @@ export function AvailabilityCalendar({
   }, [shifts])
   const selectedShifts = byDate[selected] ?? []
   const remainingHours = hoursOnDate(seeker, selected, bookedRangesFromShifts(selectedShifts))
-  const monthTitle = useMemo(() => {
-    const first = new Date(dates[0] + 'T12:00:00')
-    const last = new Date(dates[dates.length - 1] + 'T12:00:00')
-    const a = first.toLocaleDateString('nl-BE', { month: 'long', year: 'numeric' })
-    const b = last.toLocaleDateString('nl-BE', { month: 'long', year: 'numeric' })
-    return a === b ? a : `${a} – ${b}`
-  }, [dates])
+  const monthTitle = new Date(year, month, 1).toLocaleDateString('nl-BE', {
+    month: 'long',
+    year: 'numeric',
+  })
+
+  const goMonth = (delta: number) => {
+    const next = shiftYearMonth(year, month, delta)
+    setYear(next.year)
+    setMonth(next.month)
+    const first = `${next.year}-${String(next.month + 1).padStart(2, '0')}-01`
+    const lastDay = new Date(next.year, next.month + 1, 0).getDate()
+    const last = `${next.year}-${String(next.month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    if (today >= first && today <= last) setSelected(today)
+    else if (first >= today) setSelected(first)
+    else {
+      const pick = today > last ? last : today < first ? first : today
+      setSelected(pick)
+    }
+  }
 
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-base font-semibold capitalize tracking-tight">{monthTitle}</h3>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => goMonth(-1)}
+            className="grid h-9 w-9 place-items-center rounded-lg border border-line hover:bg-zinc-50"
+            aria-label="Vorige maand"
+          >
+            <Icon name="chevron" className="h-4 w-4 rotate-180" />
+          </button>
+          <h3 className="min-w-[10.5rem] text-center text-base font-semibold capitalize tracking-tight">
+            {monthTitle}
+          </h3>
+          <button
+            type="button"
+            onClick={() => goMonth(1)}
+            className="grid h-9 w-9 place-items-center rounded-lg border border-line hover:bg-zinc-50"
+            aria-label="Volgende maand"
+          >
+            <Icon name="chevron" className="h-4 w-4" />
+          </button>
+        </div>
         <div className="flex flex-wrap gap-3 text-[11px] font-medium text-muted">
           <Legend swatch="bg-terra/30 border-terra/50" label="Vrij" />
           <Legend swatch="bg-ink border-ink" label="Gepland" />
@@ -87,7 +123,8 @@ export function AvailabilityCalendar({
             ))}
           </div>
           <div className="grid grid-cols-7 gap-1.5">
-            {dates.map((date) => {
+            {cells.map((cell) => {
+              const date = cell.date
               const dayShifts = byDate[date] ?? []
               const bookedRanges = bookedRangesFromShifts(dayShifts)
               const hours = hoursOnDate(seeker, date, bookedRanges)
@@ -96,24 +133,36 @@ export function AvailabilityCalendar({
               const isSel = date === selected
               const isToday = date === today
               const disabled = isPastDate(date)
+              const outside = !cell.inMonth
               return (
                 <button
                   key={date}
                   type="button"
                   disabled={disabled}
-                  onClick={() => setSelected(date)}
+                  onClick={() => {
+                    const d = new Date(date + 'T12:00:00')
+                    if (d.getMonth() !== month || d.getFullYear() !== year) {
+                      setYear(d.getFullYear())
+                      setMonth(d.getMonth())
+                    }
+                    setSelected(date)
+                  }}
                   className={`min-h-[92px] rounded-xl border p-1.5 text-left transition ${
                     disabled
                       ? 'cursor-not-allowed border-transparent bg-zinc-50 text-zinc-300'
-                      : isSel && booked
-                        ? 'border-ink bg-ink text-white shadow-sm ring-2 ring-terra'
-                        : isSel
-                          ? 'border-ink bg-terra/45 shadow-sm ring-2 ring-ink/20'
-                          : booked
-                            ? 'border-ink bg-ink text-white hover:bg-zinc-800'
-                            : open
-                              ? 'border-terra/50 bg-terra/20 hover:bg-terra/30'
-                              : 'border-line bg-white hover:border-zinc-300'
+                      : outside
+                        ? isSel
+                          ? 'border-ink bg-terra/20 text-muted'
+                          : 'border-transparent bg-zinc-50 text-zinc-400 hover:bg-zinc-100'
+                        : isSel && booked
+                          ? 'border-ink bg-ink text-white shadow-sm ring-2 ring-terra'
+                          : isSel
+                            ? 'border-ink bg-terra/45 shadow-sm ring-2 ring-ink/20'
+                            : booked
+                              ? 'border-ink bg-ink text-white hover:bg-zinc-800'
+                              : open
+                                ? 'border-terra/50 bg-terra/20 hover:bg-terra/30'
+                                : 'border-line bg-white hover:border-zinc-300'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-1">
@@ -126,14 +175,14 @@ export function AvailabilityCalendar({
                       </span>
                     )}
                   </div>
-                  {!disabled && booked && (
+                  {!disabled && booked && !outside && (
                     <div className={`mt-1 line-clamp-2 text-[10px] font-semibold leading-tight ${!isSel ? 'text-terra' : ''}`}>
                       {dayShifts[0].startTime
                         ? `${dayShifts[0].startTime} ${dayShifts[0].title}`
                         : dayShifts[0].title}
                     </div>
                   )}
-                  {!disabled && open && !booked && (
+                  {!disabled && open && !booked && !outside && (
                     <div className="mt-1 line-clamp-2 text-[10px] font-medium leading-tight text-ink/80">
                       {hours.flexible ? 'flexibel' : hours.ranges.map((r) => formatRange(r)).join(' ')}
                     </div>
@@ -192,8 +241,13 @@ export function AvailabilityCalendar({
               </div>
             </>
           )}
-          <GhostButton onClick={onApplyWeek} className="mt-5 w-full !py-2.5 text-xs">
-            Vaste week toepassen op deze kalender
+          <GhostButton
+            onClick={() =>
+              onApplyWeek(cells.filter((c) => c.inMonth && !isPastDate(c.date)).map((c) => c.date))
+            }
+            className="mt-5 w-full !py-2.5 text-xs"
+          >
+            Vaste week toepassen op deze maand
           </GhostButton>
         </div>
       </div>

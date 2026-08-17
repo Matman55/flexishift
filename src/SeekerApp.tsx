@@ -18,7 +18,6 @@ import {
   inputClass,
 } from './components'
 import { AvailabilityCalendar, type CalendarShift } from './AvailabilityCalendar'
-import { calendarDates } from './time'
 import {
   CITIES,
   LANGUAGES,
@@ -26,7 +25,6 @@ import {
   SKILLS,
   ensureWorkplace,
   formatDateLong,
-  isoDate,
   shiftCountdown,
   workplaceFromCity,
   workplaceLine,
@@ -138,7 +136,7 @@ export function SeekerApp() {
           }))}
           onRecurring={(day, slots) => store.setRecurring(seeker.id, day, slots)}
           onHours={(date, hours) => store.setDayHours(seeker.id, date, hours)}
-          onApplyWeek={() => store.applyRecurringHours(seeker.id, calendarDates(6).filter((d) => d >= isoDate(0)))}
+          onApplyWeek={(dates) => store.applyRecurringHours(seeker.id, dates)}
           onLastMinute={(v) => store.updateSeeker(seeker.id, { lastMinute: v })}
         />
       )}
@@ -476,7 +474,7 @@ function CalendarPane({
   shifts: CalendarShift[]
   onRecurring: (day: Weekday, slots: Slot[]) => void
   onHours: (date: string, hours: DayHours | null) => void
-  onApplyWeek: () => void
+  onApplyWeek: (dates: string[]) => void
   onLastMinute: (v: boolean) => void
 }) {
   return (
