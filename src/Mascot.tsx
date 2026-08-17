@@ -129,7 +129,7 @@ export function Logo({
 }) {
   return (
     <img
-      src={`${import.meta.env.BASE_URL}logo.png`}
+      src={`${import.meta.env.BASE_URL}logo.png?v=2`}
       alt="FlexiShift"
       className="block w-auto max-w-[min(100%,36rem)] bg-transparent object-contain object-left"
       style={{ height: compact ? 140 : 168, backgroundColor: 'transparent' }}

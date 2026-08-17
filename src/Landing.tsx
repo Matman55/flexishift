@@ -82,7 +82,7 @@ export function Landing({
           <div className="blob blob-dots absolute -left-4 top-16 h-24 w-24 bg-ink" />
           <div className="absolute inset-0 flex items-end justify-center pb-2">
             <img
-              src={`${import.meta.env.BASE_URL}flexi.png`}
+              src={`${import.meta.env.BASE_URL}flexi.png?v=2`}
               alt="Flexi, de mascotte van FlexiShift"
               className="mascot-bob h-[340px] w-auto max-w-full bg-transparent object-contain sm:h-[380px]"
               style={{ backgroundColor: 'transparent' }}
