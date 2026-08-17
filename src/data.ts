@@ -1,6 +1,6 @@
 import { emptyRecurring, isoDate } from './constants'
 import { rangeFromSlots } from './time'
-import type { Employer, Job, Recurring, Seeker, Slot, Weekday, Workplace } from './types'
+import type { Employer, Job, Recurring, Seeker, Slot, Weekday, WorkRequest, Workplace } from './types'
 
 function rec(partial: Partial<Recurring>): Recurring {
   return { ...emptyRecurring(), ...partial }
@@ -664,4 +664,214 @@ export function weekdayFromIso(iso: string): Weekday {
   const d = new Date(iso + 'T12:00:00')
   const map = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
   return map[d.getDay()]
+}
+
+function daysAgoIso(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() - days)
+  return d.toISOString()
+}
+
+export function seedDemoRequests(firstJob?: Job): WorkRequest[] {
+  const first = firstJob ?? seedJobs()[0]
+  const readAt = new Date().toISOString()
+  return [
+    {
+      id: 'r-demo',
+      jobId: 'j-1',
+      employerId: 'e-kroon',
+      seekerId: 's-emma',
+      from: 'employer',
+      message:
+        'Emma, we zagen dat je vanavond vrij bent. Kun je invallen aan de bar? We hebben meteen iemand nodig.',
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      date: first.date,
+      slots: ['avond'],
+      startTime: first.startTime,
+      endTime: first.endTime,
+      title: 'Bediening — collega ziek',
+      city: 'Gent',
+    },
+    {
+      id: 'r-worked-emma-1',
+      jobId: null,
+      employerId: 'e-kroon',
+      seekerId: 's-emma',
+      from: 'employer',
+      message: 'Bedankt voor je hulp aan de bar gisterenavond.',
+      status: 'accepted',
+      createdAt: daysAgoIso(4),
+      date: isoDate(-3),
+      slots: ['avond'],
+      startTime: '18:00',
+      endTime: '23:00',
+      title: 'Bediening avondshift',
+      city: 'Gent',
+      hourlyRate: 16,
+      readAt,
+    },
+    {
+      id: 'r-worked-emma-2',
+      jobId: null,
+      employerId: 'e-eventco',
+      seekerId: 's-emma',
+      from: 'employer',
+      message: 'Opbouw klaar — super gewerkt.',
+      status: 'accepted',
+      createdAt: daysAgoIso(10),
+      date: isoDate(-9),
+      slots: ['ochtend', 'namiddag'],
+      startTime: '08:00',
+      endTime: '16:00',
+      title: 'Event crew — opbouw',
+      city: 'Antwerpen',
+      hourlyRate: 17,
+      readAt,
+    },
+    {
+      id: 'r-worked-emma-3',
+      jobId: null,
+      employerId: 'e-kroon',
+      seekerId: 's-emma',
+      from: 'seeker',
+      message: 'Ik was er om 12u. Shift afgerond.',
+      status: 'accepted',
+      createdAt: daysAgoIso(19),
+      date: isoDate(-18),
+      slots: ['namiddag'],
+      startTime: '12:00',
+      endTime: '18:00',
+      title: 'Terras bediening',
+      city: 'Gent',
+      hourlyRate: 16,
+      readAt,
+    },
+    {
+      id: 'r-worked-emma-4',
+      jobId: null,
+      employerId: 'e-harbour',
+      seekerId: 's-emma',
+      from: 'employer',
+      message: 'Ontbijtshift zit erop. Graag tot de volgende.',
+      status: 'accepted',
+      createdAt: daysAgoIso(7),
+      date: isoDate(-6),
+      slots: ['ochtend'],
+      startTime: '07:00',
+      endTime: '13:00',
+      title: 'Ontbijtzaal',
+      city: 'Brugge',
+      hourlyRate: 15,
+      readAt,
+    },
+    {
+      id: 'r-worked-emma-5',
+      jobId: null,
+      employerId: 'e-kroon',
+      seekerId: 's-emma',
+      from: 'employer',
+      message: 'Drukke vrijdag, merci.',
+      status: 'accepted',
+      createdAt: daysAgoIso(23),
+      date: isoDate(-22),
+      slots: ['avond'],
+      startTime: '18:00',
+      endTime: '23:00',
+      title: 'Bar — weekendshift',
+      city: 'Gent',
+      hourlyRate: 16,
+      readAt,
+    },
+    {
+      id: 'r-worked-emma-6',
+      jobId: null,
+      employerId: 'e-eventco',
+      seekerId: 's-emma',
+      from: 'employer',
+      message: 'Afbraak vlot gegaan.',
+      status: 'accepted',
+      createdAt: daysAgoIso(29),
+      date: isoDate(-28),
+      slots: ['namiddag', 'avond'],
+      startTime: '14:00',
+      endTime: '22:00',
+      title: 'Event crew — afbraak',
+      city: 'Antwerpen',
+      hourlyRate: 18,
+      readAt,
+    },
+    {
+      id: 'r-worked-emma-7',
+      jobId: null,
+      employerId: 'e-martens',
+      seekerId: 's-emma',
+      from: 'employer',
+      message: 'Kassa en rekken — top gedaan.',
+      status: 'accepted',
+      createdAt: daysAgoIso(36),
+      date: isoDate(-35),
+      slots: ['ochtend', 'namiddag'],
+      startTime: '09:00',
+      endTime: '17:00',
+      title: 'Winkelvloer extra',
+      city: 'Leuven',
+      hourlyRate: 14,
+      readAt,
+    },
+    {
+      id: 'r-worked-emma-8',
+      jobId: null,
+      employerId: 'e-kroon',
+      seekerId: 's-emma',
+      from: 'seeker',
+      message: 'Avondshift afgerond.',
+      status: 'accepted',
+      createdAt: daysAgoIso(49),
+      date: isoDate(-48),
+      slots: ['avond'],
+      startTime: '18:00',
+      endTime: '23:00',
+      title: 'Bediening terrasavond',
+      city: 'Gent',
+      hourlyRate: 16,
+      readAt,
+    },
+    {
+      id: 'r-worked-emma-9',
+      jobId: null,
+      employerId: 'e-harbour',
+      seekerId: 's-emma',
+      from: 'employer',
+      message: 'Room service avond. Tot gauw.',
+      status: 'accepted',
+      createdAt: daysAgoIso(56),
+      date: isoDate(-55),
+      slots: ['namiddag', 'avond'],
+      startTime: '16:00',
+      endTime: '22:00',
+      title: 'Room service',
+      city: 'Brugge',
+      hourlyRate: 15,
+      readAt,
+    },
+  ]
+}
+
+export function mergeDemoWorkedRequests(existing: WorkRequest[]): WorkRequest[] {
+  const demoWorked = seedDemoRequests().filter((r) => r.id.startsWith('r-worked-'))
+  const byId = Object.fromEntries(demoWorked.map((r) => [r.id, r]))
+  const ids = new Set(existing.map((r) => r.id))
+  const patched = existing.map((r) => {
+    const demo = byId[r.id]
+    if (!demo) return r
+    return {
+      ...r,
+      hourlyRate: r.hourlyRate ?? demo.hourlyRate,
+      startTime: r.startTime ?? demo.startTime,
+      endTime: r.endTime ?? demo.endTime,
+    }
+  })
+  const missing = demoWorked.filter((r) => !ids.has(r.id))
+  return missing.length ? [...patched, ...missing] : patched
 }

@@ -35,6 +35,53 @@ function bookedRangesFromShifts(shifts: CalendarShift[]): TimeRange[] {
   )
 }
 
+function shiftLabel(s: CalendarShift): string {
+  return s.startTime ? `${s.startTime} ${s.title}` : s.title
+}
+
+function dayCellClass({
+  past,
+  outside,
+  isSel,
+  planned,
+  worked,
+  open,
+}: {
+  past: boolean
+  outside: boolean
+  isSel: boolean
+  planned: boolean
+  worked: boolean
+  open: boolean
+}): string {
+  const base = 'min-h-[92px] rounded-xl border p-1.5 text-left transition'
+  if (outside && !isSel && !worked) {
+    return `${base} border-transparent bg-zinc-50 text-zinc-400 hover:bg-zinc-100`
+  }
+  if (isSel && worked) {
+    return `${base} border-emerald-800 bg-emerald-800 text-white shadow-sm ring-2 ring-terra`
+  }
+  if (isSel && planned) {
+    return `${base} border-ink bg-ink text-white shadow-sm ring-2 ring-terra`
+  }
+  if (isSel) {
+    return `${base} border-ink bg-terra/45 shadow-sm ring-2 ring-ink/20`
+  }
+  if (worked) {
+    return `${base} border-emerald-700/35 bg-emerald-50 text-emerald-950 hover:bg-emerald-100`
+  }
+  if (planned) {
+    return `${base} border-ink bg-ink text-white hover:bg-zinc-800`
+  }
+  if (past || outside) {
+    return `${base} border-transparent bg-zinc-50 text-zinc-400 hover:bg-zinc-100`
+  }
+  if (open) {
+    return `${base} border-terra/50 bg-terra/20 hover:bg-terra/30`
+  }
+  return `${base} border-line bg-white hover:border-zinc-300`
+}
+
 export function AvailabilityCalendar({
   seeker,
   shifts = [],
@@ -111,6 +158,7 @@ export function AvailabilityCalendar({
         <div className="flex flex-wrap gap-3 text-[11px] font-medium text-muted">
           <Legend swatch="bg-terra/30 border-terra/50" label="Vrij" />
           <Legend swatch="bg-ink border-ink" label="Gepland" />
+          <Legend swatch="bg-emerald-50 border-emerald-700/40" label="Gewerkt" />
           <Legend swatch="bg-white border-line" label="Niet vrij" />
         </div>
       </div>
@@ -130,15 +178,16 @@ export function AvailabilityCalendar({
               const hours = hoursOnDate(seeker, date, bookedRanges)
               const open = isDayOpen(hours)
               const booked = dayShifts.length > 0
+              const pastDay = isPastDate(date)
+              const worked = booked && pastDay
+              const planned = booked && !pastDay
               const isSel = date === selected
               const isToday = date === today
-              const disabled = isPastDate(date)
               const outside = !cell.inMonth
               return (
                 <button
                   key={date}
                   type="button"
-                  disabled={disabled}
                   onClick={() => {
                     const d = new Date(date + 'T12:00:00')
                     if (d.getMonth() !== month || d.getFullYear() !== year) {
@@ -147,42 +196,40 @@ export function AvailabilityCalendar({
                     }
                     setSelected(date)
                   }}
-                  className={`min-h-[92px] rounded-xl border p-1.5 text-left transition ${
-                    disabled
-                      ? 'cursor-not-allowed border-transparent bg-zinc-50 text-zinc-300'
-                      : outside
-                        ? isSel
-                          ? 'border-ink bg-terra/20 text-muted'
-                          : 'border-transparent bg-zinc-50 text-zinc-400 hover:bg-zinc-100'
-                        : isSel && booked
-                          ? 'border-ink bg-ink text-white shadow-sm ring-2 ring-terra'
-                          : isSel
-                            ? 'border-ink bg-terra/45 shadow-sm ring-2 ring-ink/20'
-                            : booked
-                              ? 'border-ink bg-ink text-white hover:bg-zinc-800'
-                              : open
-                                ? 'border-terra/50 bg-terra/20 hover:bg-terra/30'
-                                : 'border-line bg-white hover:border-zinc-300'
-                  }`}
+                  className={dayCellClass({
+                    past: pastDay,
+                    outside,
+                    isSel,
+                    planned,
+                    worked,
+                    open,
+                  })}
                 >
                   <div className="flex items-start justify-between gap-1">
                     <span className="text-sm font-bold">
                       {Number(date.slice(8))}
                     </span>
-                    {isToday && !disabled && (
-                      <span className={`text-[9px] font-semibold uppercase ${booked && !isSel ? 'text-terra' : 'text-muted'}`}>
+                    {worked ? (
+                      <Icon
+                        name="check"
+                        className={`h-3.5 w-3.5 shrink-0 ${isSel ? 'text-white' : 'text-emerald-700'}`}
+                      />
+                    ) : isToday ? (
+                      <span className={`text-[9px] font-semibold uppercase ${planned && !isSel ? 'text-terra' : 'text-muted'}`}>
                         nu
                       </span>
-                    )}
+                    ) : null}
                   </div>
-                  {!disabled && booked && !outside && (
-                    <div className={`mt-1 line-clamp-2 text-[10px] font-semibold leading-tight ${!isSel ? 'text-terra' : ''}`}>
-                      {dayShifts[0].startTime
-                        ? `${dayShifts[0].startTime} ${dayShifts[0].title}`
-                        : dayShifts[0].title}
+                  {booked && !outside && (
+                    <div
+                      className={`mt-1 line-clamp-2 text-[10px] font-semibold leading-tight ${
+                        isSel ? '' : worked ? 'text-emerald-800' : 'text-terra'
+                      }`}
+                    >
+                      {shiftLabel(dayShifts[0])}
                     </div>
                   )}
-                  {!disabled && open && !booked && !outside && (
+                  {!pastDay && open && !booked && !outside && (
                     <div className="mt-1 line-clamp-2 text-[10px] font-medium leading-tight text-ink/80">
                       {hours.flexible ? 'flexibel' : hours.ranges.map((r) => formatRange(r)).join(' ')}
                     </div>
@@ -199,21 +246,24 @@ export function AvailabilityCalendar({
           </div>
           <h3 className="text-lg font-bold tracking-tight">{formatDateLong(selected)}</h3>
           {past ? (
-            <p className="mt-3 text-sm text-muted">Deze dag is al voorbij.</p>
+            selectedShifts.length > 0 ? (
+              <div className="mt-4 space-y-2">
+                <p className="text-sm text-muted">Deze dag is voorbij. Dit heb je gewerkt:</p>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted">Gewerkt</div>
+                {selectedShifts.map((s) => (
+                  <ShiftCard key={s.id} shift={s} tone="worked" />
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-muted">Deze dag is al voorbij. Je hebt hier geen shift gewerkt.</p>
+            )
           ) : (
             <>
               {selectedShifts.length > 0 && (
                 <div className="mt-4 space-y-2">
                   <div className="text-xs font-semibold uppercase tracking-wide text-muted">Gepland</div>
                   {selectedShifts.map((s) => (
-                    <div key={s.id} className="rounded-xl bg-ink px-3 py-2.5 text-white">
-                      <div className="text-[11px] font-medium text-terra">Bevestigde shift</div>
-                      <div className="mt-0.5 font-semibold">{s.title}</div>
-                      <div className="text-sm text-white/70">
-                        {s.company}
-                        {s.startTime ? ` · ${s.startTime}–${s.endTime}` : ''}
-                      </div>
-                    </div>
+                    <ShiftCard key={s.id} shift={s} tone="planned" />
                   ))}
                 </div>
               )}
@@ -250,6 +300,28 @@ export function AvailabilityCalendar({
             Vaste week toepassen op deze maand
           </GhostButton>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function ShiftCard({
+  shift,
+  tone,
+}: {
+  shift: CalendarShift
+  tone: 'planned' | 'worked'
+}) {
+  const worked = tone === 'worked'
+  return (
+    <div className={`rounded-xl px-3 py-2.5 ${worked ? 'bg-emerald-800 text-white' : 'bg-ink text-white'}`}>
+      <div className={`text-[11px] font-medium ${worked ? 'text-emerald-100' : 'text-terra'}`}>
+        {worked ? 'Afgeronde shift' : 'Bevestigde shift'}
+      </div>
+      <div className="mt-0.5 font-semibold">{shift.title}</div>
+      <div className="text-sm text-white/70">
+        {shift.company}
+        {shift.startTime ? ` · ${shift.startTime}–${shift.endTime}` : ''}
       </div>
     </div>
   )

@@ -94,6 +94,19 @@ export function formatDate(iso: string): string {
   })
 }
 
+export function formatEuro(n: number, compact = false): string {
+  return new Intl.NumberFormat('nl-BE', {
+    style: 'currency',
+    currency: 'EUR',
+    maximumFractionDigits: compact ? 0 : 2,
+    minimumFractionDigits: compact ? 0 : 2,
+  }).format(n)
+}
+
+export function formatHours(n: number): string {
+  return `${new Intl.NumberFormat('nl-BE', { maximumFractionDigits: 1 }).format(n)} u`
+}
+
 export function formatDateLong(iso: string): string {
   const d = new Date(iso + 'T12:00:00')
   return d.toLocaleDateString('nl-BE', {

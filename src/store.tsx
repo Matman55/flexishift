@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import { defaultContract, emptyRecurring, uid, ensureWorkplace, workplaceFromCity } from './constants'
-import { EMPLOYERS, SEEKERS, seedJobs, weekdayFromIso } from './data'
+import { EMPLOYERS, SEEKERS, mergeDemoWorkedRequests, seedDemoRequests, seedJobs, weekdayFromIso } from './data'
 import { dayHoursFromSlots, rangeFromSlots } from './time'
 import type {
   AppState,
@@ -30,7 +30,8 @@ function load(): AppState {
       const parsed = JSON.parse(raw) as AppState
       if (parsed.seekers?.length && parsed.jobs?.length) {
         const seededById = Object.fromEntries(seedJobs().map((j) => [j.id, j]))
-        return {
+        const requests = mergeDemoWorkedRequests(parsed.requests ?? [])
+        const next: AppState = {
           ...parsed,
           seekers: parsed.seekers.map((s) => ({ ...s, hours: s.hours ?? {} })),
           employers: (parsed.employers?.length ? parsed.employers : EMPLOYERS).map((e) => ({
@@ -40,58 +41,44 @@ function load(): AppState {
             workplace: e.workplace ?? workplaceFromCity(e.city),
           })),
           jobs: parsed.jobs.map((j) => {
-            let next = j
+            let job = j
             if (!j.startTime || !j.endTime) {
               const t = rangeFromSlots(j.slots ?? ['avond'])
-              next = { ...next, startTime: t.start, endTime: t.end }
+              job = { ...job, startTime: t.start, endTime: t.end }
             }
-            if (!next.workplace?.lat || !next.workplace?.lng) {
-              next = {
-                ...next,
+            if (!job.workplace?.lat || !job.workplace?.lng) {
+              job = {
+                ...job,
                 workplace: seededById[j.id]?.workplace ?? workplaceFromCity(j.city),
               }
             } else {
-              next = { ...next, workplace: ensureWorkplace(next) }
+              job = { ...job, workplace: ensureWorkplace(job) }
             }
             const seeded = seededById[j.id]
             return {
-              ...next,
-              contractKind: next.contractKind ?? seeded?.contractKind ?? defaultContract(next.sector),
-              requiresLicense: next.requiresLicense ?? next.skills?.includes('Chauffeur') ?? false,
+              ...job,
+              contractKind: job.contractKind ?? seeded?.contractKind ?? defaultContract(job.sector),
+              requiresLicense: job.requiresLicense ?? job.skills?.includes('Chauffeur') ?? false,
             }
           }),
+          requests,
         }
+        const prevSig = (parsed.requests ?? []).map((r) => `${r.id}:${r.hourlyRate ?? ''}`).join('|')
+        const nextSig = requests.map((r) => `${r.id}:${r.hourlyRate ?? ''}`).join('|')
+        if (prevSig !== nextSig) persist(next)
+        return next
       }
     }
   } catch {
     /* ignore */
   }
   const jobs = seedJobs()
-  const first = jobs[0]
   return {
     session: null,
     seekers: SEEKERS,
     employers: EMPLOYERS,
     jobs,
-    requests: [
-      {
-        id: 'r-demo',
-        jobId: 'j-1',
-        employerId: 'e-kroon',
-        seekerId: 's-emma',
-        from: 'employer',
-        message:
-          'Emma, we zagen dat je vanavond vrij bent. Kun je invallen aan de bar? We hebben meteen iemand nodig.',
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-        date: first.date,
-        slots: ['avond'],
-        startTime: first.startTime,
-        endTime: first.endTime,
-        title: 'Bediening — collega ziek',
-        city: 'Gent',
-      },
-    ],
+    requests: seedDemoRequests(jobs[0]),
   }
 }
 
@@ -319,6 +306,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         requests: [
           {
             ...req,
+            hourlyRate:
+              req.hourlyRate ??
+              (req.jobId ? p.jobs.find((j) => j.id === req.jobId)?.hourlyRate : undefined),
             id: uid('r'),
             createdAt: new Date().toISOString(),
             status: 'pending',
@@ -335,9 +325,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       commit((p) => {
         const nextReqs = p.requests.map((r) => {
           if (r.id !== id) return r
+          const jobRate = r.jobId ? p.jobs.find((j) => j.id === r.jobId)?.hourlyRate : undefined
           return {
             ...r,
             status,
+            hourlyRate: r.hourlyRate ?? (status === 'accepted' ? jobRate : r.hourlyRate),
             readAt: status === 'accepted' ? undefined : r.readAt,
           }
         })

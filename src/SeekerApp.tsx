@@ -25,6 +25,8 @@ import {
   SKILLS,
   ensureWorkplace,
   formatDateLong,
+  formatEuro,
+  formatHours,
   shiftCountdown,
   workplaceFromCity,
   workplaceLine,
@@ -33,9 +35,27 @@ import { Logo } from './Landing'
 import { EmptyMascot, Guide, Mascot } from './Mascot'
 import { jobsForSeeker, bookedRangesForSeeker } from './match'
 import { useStore } from './store'
+import {
+  completedShifts,
+  currentMonthKey,
+  earningsByMonth,
+  isCompletedShift,
+  shiftHours,
+  shiftPay,
+  shiftRate,
+} from './earnings'
 import type { ApplyExtras, DayHours, Job, Seeker, Slot, Weekday, WorkRequest } from './types'
 
-type Tab = 'home' | 'cal' | 'jobs' | 'inbox' | 'profile'
+type Tab = 'home' | 'cal' | 'jobs' | 'done' | 'inbox' | 'profile'
+
+function payInfo(r: WorkRequest, jobs: Job[], fallback: number, past?: boolean) {
+  return {
+    hours: shiftHours(r),
+    rate: shiftRate(r, jobs, fallback),
+    pay: shiftPay(r, jobs, fallback),
+    past,
+  }
+}
 
 export function SeekerApp() {
   const store = useStore()
@@ -81,6 +101,7 @@ export function SeekerApp() {
       title: job.title,
       city: job.city,
       extras,
+      hourlyRate: job.hourlyRate,
     })
     pingToast('Sollicitatie verstuurd')
   }
@@ -116,10 +137,10 @@ export function SeekerApp() {
         <Home
           seeker={seeker}
           matches={matches}
-          pending={pending}
           shifts={shifts}
           onOpenJobs={() => setTab('jobs')}
           onOpenCal={() => setTab('cal')}
+          onOpenHistory={() => setTab('done')}
           onApply={sendApply}
         />
       )}
@@ -148,6 +169,7 @@ export function SeekerApp() {
           onApply={sendApply}
         />
       )}
+      {tab === 'done' && <HistoryPane seeker={seeker} />}
       {tab === 'inbox' && (
         <InboxPane
           seeker={seeker}
@@ -180,16 +202,17 @@ function Shell({
   banner?: ReactNode
   children: ReactNode
 }) {
-  const items: { id: Tab; label: string; icon: 'home' | 'cal' | 'brief' | 'inbox' | 'user' }[] = [
+  const items: { id: Tab; label: string; icon: 'home' | 'cal' | 'brief' | 'check' | 'inbox' | 'user' }[] = [
     { id: 'home', label: 'Home', icon: 'home' },
     { id: 'cal', label: 'Kalender', icon: 'cal' },
     { id: 'jobs', label: 'Jobs', icon: 'brief' },
+    { id: 'done', label: 'Gedaan', icon: 'check' },
     { id: 'inbox', label: 'Inbox', icon: 'inbox' },
     { id: 'profile', label: 'Profiel', icon: 'user' },
   ]
   return (
-    <div className="min-h-dvh md:grid md:grid-cols-[232px_1fr]">
-      <aside className="hidden border-r border-line bg-cream md:flex md:flex-col md:px-4 md:py-6">
+    <div className="min-h-dvh md:grid md:grid-cols-[280px_1fr]">
+      <aside className="hidden border-r border-line bg-cream md:flex md:flex-col md:px-5 md:py-6">
         <Logo compact />
         <nav className="mt-8 flex flex-1 flex-col gap-0.5">
           {items.map((it) => (
@@ -216,7 +239,7 @@ function Shell({
         </button>
       </aside>
       <div className="pb-36 md:pb-24">
-        <header className="flex items-center justify-between border-b border-line bg-cream px-6 py-4 md:hidden">
+        <header className="flex items-center justify-between border-b border-line bg-cream px-5 py-3 md:hidden">
           <Logo compact />
           <button type="button" onClick={onLogout} className="text-sm font-medium text-muted">
             Uit
@@ -224,7 +247,7 @@ function Shell({
         </header>
         <main className="mx-auto max-w-3xl px-6 py-8 md:max-w-4xl md:px-10 md:py-10">{children}</main>
       </div>
-      <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-line bg-cream/95 px-1 py-2 backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-6 border-t border-line bg-cream/95 px-1 py-2 backdrop-blur md:hidden">
         {items.map((it) => (
           <button
             key={it.id}
@@ -255,23 +278,27 @@ function Shell({
 function Home({
   seeker,
   matches,
-  pending,
   shifts,
   onOpenJobs,
   onOpenCal,
+  onOpenHistory,
   onApply,
 }: {
   seeker: Seeker
   matches: Array<Job & { score: number; reasons?: string[]; travel?: string }>
-  pending: number
   shifts: WorkRequest[]
   onOpenJobs: () => void
   onOpenCal: () => void
+  onOpenHistory: () => void
   onApply: (job: Job, extras: ApplyExtras) => void
 }) {
   const store = useStore()
   const [openShift, setOpenShift] = useState<WorkRequest | null>(null)
   const upcoming = shifts.filter((s) => !shiftCountdown(s.date, s.startTime, s.endTime).past)
+  const done = shifts.filter((s) => isCompletedShift(s))
+  const monthPay = done
+    .filter((s) => s.date.startsWith(currentMonthKey()))
+    .reduce((sum, s) => sum + shiftPay(s, store.jobs, seeker.hourlyRateMin), 0)
   const urgent = matches.filter((j) => j.urgent)
   const shiftWp = (r: WorkRequest) => {
     const job = r.jobId ? store.jobs.find((j) => j.id === r.jobId) : undefined
@@ -292,8 +319,8 @@ function Home({
       </h1>
       <div className="mt-8 grid grid-cols-3 gap-4">
         <Stat n={upcoming.length} l="shiften" />
-        <Stat n={pending} l="aanvragen" />
-        <Stat n={seeker.jobsDone} l="gedaan" />
+        <Stat n={formatEuro(monthPay, true)} l="deze maand" onClick={onOpenHistory} />
+        <Stat n={done.length} l="gedaan" onClick={onOpenHistory} />
       </div>
       {upcoming.length > 0 && (
         <section className="mt-10">
@@ -327,6 +354,41 @@ function Home({
                     <Icon name="pin" className="h-3.5 w-3.5 text-terra" />
                     {workplaceLine(shiftWp(s))}
                   </p>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      )}
+      {done.length > 0 && (
+        <section className="mt-10">
+          <div className="flex items-end justify-between gap-3">
+            <h2 className="text-lg font-semibold tracking-tight">Laatst gewerkt</h2>
+            <button type="button" onClick={onOpenHistory} className="text-sm font-medium text-muted hover:text-ink">
+              Volledig overzicht
+            </button>
+          </div>
+          <div className="mt-4 space-y-3">
+            {done.slice(0, 3).map((s) => {
+              const emp = store.employers.find((e) => e.id === s.employerId)
+              const pay = shiftPay(s, store.jobs, seeker.hourlyRateMin)
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setOpenShift(s)}
+                  className={`${cardClass} w-full p-5 text-left transition-colors hover:border-terra/40`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-medium">{s.title}</h3>
+                      <p className="mt-0.5 text-sm text-muted">
+                        {emp?.company} · {formatDateLong(s.date)}
+                        {s.startTime ? ` · ${s.startTime}–${s.endTime}` : ''}
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold tracking-tight">{formatEuro(pay)}</span>
+                  </div>
                 </button>
               )
             })}
@@ -368,6 +430,7 @@ function Home({
           request={openShift}
           workplace={shiftWp(openShift)}
           company={store.employers.find((e) => e.id === openShift.employerId)?.company ?? ''}
+          earnings={payInfo(openShift, store.jobs, seeker.hourlyRateMin, isCompletedShift(openShift))}
           onClose={() => setOpenShift(null)}
         />
       )}
@@ -375,13 +438,29 @@ function Home({
   )
 }
 
-function Stat({ n, l }: { n: number; l: string }) {
-  return (
-    <div className={`${cardClass} p-5`}>
+function Stat({
+  n,
+  l,
+  onClick,
+}: {
+  n: number | string
+  l: string
+  onClick?: () => void
+}) {
+  const inner = (
+    <>
       <div className="text-2xl font-semibold tracking-tight">{n}</div>
       <div className="mt-1 text-xs font-medium uppercase tracking-wide text-muted">{l}</div>
-    </div>
+    </>
   )
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={`${cardClass} p-5 text-left transition-colors hover:border-terra/40`}>
+        {inner}
+      </button>
+    )
+  }
+  return <div className={`${cardClass} p-5`}>{inner}</div>
 }
 
 function JobCard({
@@ -482,12 +561,12 @@ function CalendarPane({
       <Guide
         pose="point"
         title="Jouw week in één oogopslag"
-        text="Geel is vrij, zwart is een bevestigde job. Tik op een dag om uren te zetten of een shift te bekijken."
+        text="Geel is vrij, zwart is gepland, groen is al gewerkt. Tik op een dag om uren te zetten of een shift te bekijken."
       />
       <h1 className="text-3xl font-semibold tracking-tight">Jouw kalender</h1>
       <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">
-        Zie in één keer wanneer je nog vrij bent en wat al gepland staat. Klik op een dag om
-        uren aan te passen of een bevestigde shift te bekijken.
+        Zie in één keer wanneer je vrij bent, wat nog gepland staat en welke dagen je al
+        gewerkt hebt. Blader terug in de maanden om je geschiedenis te bekijken.
       </p>
       <label className={`${cardClass} mt-8 flex items-center justify-between p-5`}>
         <div>
@@ -507,7 +586,7 @@ function CalendarPane({
 
       <h2 className="mt-10 text-lg font-semibold tracking-tight">Overzicht</h2>
       <p className="mb-4 mt-1 text-sm text-muted">
-        Gele dagen zijn vrij. Zwarte dagen hebben een bevestigde job.
+        Geel is vrij, zwart is gepland, groen zijn dagen die je al gewerkt hebt.
       </p>
       <AvailabilityCalendar
         seeker={seeker}
@@ -594,7 +673,9 @@ function InboxPane({
   onStatus: (id: string, status: 'accepted' | 'declined') => void
 }) {
   const store = useStore()
-  const items = store.requests.filter((r) => r.seekerId === seeker.id)
+  const items = store.requests.filter(
+    (r) => r.seekerId === seeker.id && !(r.status === 'accepted' && isCompletedShift(r)),
+  )
   const [openShift, setOpenShift] = useState<WorkRequest | null>(null)
   const wpFor = (r: WorkRequest) => {
     const job = r.jobId ? store.jobs.find((j) => j.id === r.jobId) : undefined
@@ -675,6 +756,146 @@ function InboxPane({
           request={openShift}
           workplace={wpFor(openShift)}
           company={store.employers.find((e) => e.id === openShift.employerId)?.company ?? ''}
+          earnings={payInfo(openShift, store.jobs, seeker.hourlyRateMin, isCompletedShift(openShift))}
+          onClose={() => setOpenShift(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function HistoryPane({ seeker }: { seeker: Seeker }) {
+  const store = useStore()
+  const [openShift, setOpenShift] = useState<WorkRequest | null>(null)
+  const done = completedShifts(store.requests, seeker.id)
+  const months = earningsByMonth(done, store.jobs, seeker.hourlyRateMin)
+  const nowKey = currentMonthKey()
+  const [selected, setSelected] = useState(months.find((m) => m.key === nowKey)?.key ?? months[0]?.key ?? nowKey)
+  const active = months.find((m) => m.key === selected)
+  const thisMonth = months.find((m) => m.key === nowKey)
+  const totalPay = months.reduce((sum, m) => sum + m.pay, 0)
+  const maxPay = Math.max(1, ...months.map((m) => m.pay))
+  const shiftWp = (r: WorkRequest) => {
+    const job = r.jobId ? store.jobs.find((j) => j.id === r.jobId) : undefined
+    if (job) return ensureWorkplace(job)
+    const emp = store.employers.find((e) => e.id === r.employerId)
+    return emp?.workplace ?? workplaceFromCity(r.city)
+  }
+
+  return (
+    <div>
+      <Guide
+        pose="point"
+        title="Jouw jobs en loon"
+        text="Elke afgeronde shift blijft hier staan. Tik een maand aan om te zien wat je toen verdiende."
+      />
+      <h1 className="text-3xl font-semibold tracking-tight">Gedaan</h1>
+      <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">
+        Terugvinden wat je al gedaan hebt, en hoeveel je per maand uitbetaald kreeg.
+      </p>
+
+      <div className="mt-8 grid grid-cols-2 gap-4">
+        <div className={`${cardClass} p-5`}>
+          <div className="text-xs font-medium uppercase tracking-wide text-muted">Deze maand</div>
+          <div className="mt-1 text-2xl font-semibold tracking-tight">
+            {formatEuro(thisMonth?.pay ?? 0, true)}
+          </div>
+          <p className="mt-1 text-sm text-muted">
+            {formatHours(thisMonth?.hours ?? 0)} · {thisMonth?.count ?? 0} shiften
+          </p>
+        </div>
+        <div className={`${cardClass} p-5`}>
+          <div className="text-xs font-medium uppercase tracking-wide text-muted">Totaal in overzicht</div>
+          <div className="mt-1 text-2xl font-semibold tracking-tight">{formatEuro(totalPay, true)}</div>
+          <p className="mt-1 text-sm text-muted">
+            {done.length} jobs · {formatHours(months.reduce((s, m) => s + m.hours, 0))}
+          </p>
+        </div>
+      </div>
+
+      {months.length > 0 && (
+        <section className="mt-10">
+          <h2 className="text-lg font-semibold tracking-tight">Per maand</h2>
+          <div className="mt-4 space-y-2">
+            {months.map((m) => {
+              const on = m.key === selected
+              return (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => setSelected(m.key)}
+                  className={`w-full rounded-xl border px-4 py-3 text-left transition ${
+                    on ? 'border-ink bg-ink text-white' : 'border-line bg-cream hover:border-zinc-300'
+                  }`}
+                >
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm font-semibold capitalize">{m.label}</span>
+                    <span className="text-sm font-semibold">{formatEuro(m.pay)}</span>
+                  </div>
+                  <div className={`mt-2 h-1.5 overflow-hidden rounded-full ${on ? 'bg-white/20' : 'bg-zinc-100'}`}>
+                    <div
+                      className={`h-full rounded-full ${on ? 'bg-terra' : 'bg-ink'}`}
+                      style={{ width: `${Math.max(8, (m.pay / maxPay) * 100)}%` }}
+                    />
+                  </div>
+                  <p className={`mt-1.5 text-xs ${on ? 'text-white/70' : 'text-muted'}`}>
+                    {m.count} {m.count === 1 ? 'shift' : 'shiften'} · {formatHours(m.hours)}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold tracking-tight">
+          {active ? `Jobs in ${active.label}` : 'Jouw jobs'}
+        </h2>
+        <div className="mt-4 space-y-3">
+          {done.length === 0 && (
+            <EmptyMascot
+              pose="idle"
+              title="Nog geen shiften achter de rug"
+              text="Zodra een bevestigde job voorbij is, zie je hem hier — met uren en loon."
+            />
+          )}
+          {(active?.shifts ?? []).map((s) => {
+            const emp = store.employers.find((e) => e.id === s.employerId)
+            const pay = shiftPay(s, store.jobs, seeker.hourlyRateMin)
+            const hours = shiftHours(s)
+            const rate = shiftRate(s, store.jobs, seeker.hourlyRateMin)
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setOpenShift(s)}
+                className={`${cardClass} w-full p-5 text-left transition-colors hover:border-terra/40`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-medium">{s.title}</h3>
+                    <p className="mt-0.5 text-sm text-muted">
+                      {emp?.company} · {formatDateLong(s.date)}
+                      {s.startTime ? ` · ${s.startTime}–${s.endTime}` : ''}
+                    </p>
+                    <p className="mt-2 text-xs font-medium text-muted">
+                      {formatHours(hours)} · €{rate}/u
+                    </p>
+                  </div>
+                  <span className="text-sm font-semibold tracking-tight">{formatEuro(pay)}</span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </section>
+      {openShift && (
+        <ShiftDetail
+          request={openShift}
+          workplace={shiftWp(openShift)}
+          company={store.employers.find((e) => e.id === openShift.employerId)?.company ?? ''}
+          earnings={payInfo(openShift, store.jobs, seeker.hourlyRateMin, true)}
           onClose={() => setOpenShift(null)}
         />
       )}

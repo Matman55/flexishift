@@ -132,6 +132,7 @@ export function EmployerApp() {
               endTime,
               title,
               city: employer.city,
+              hourlyRate: m.seeker.hourlyRateMin,
             })
             pingToast(`Aanvraag gestuurd naar ${m.seeker.name}`)
           }}
@@ -165,6 +166,7 @@ export function EmployerApp() {
               endTime: job.endTime,
               title: job.title,
               city: job.city,
+              hourlyRate: job.hourlyRate,
             })
             pingToast(`Aanvraag gestuurd naar ${m.seeker.name}`)
           }}
@@ -210,8 +212,8 @@ function Shell({
     { id: 'inbox', label: 'Inbox', icon: 'inbox' },
   ]
   return (
-    <div className="min-h-dvh md:grid md:grid-cols-[232px_1fr]">
-      <aside className="hidden border-r border-line bg-cream md:flex md:flex-col md:px-4 md:py-6">
+    <div className="min-h-dvh md:grid md:grid-cols-[280px_1fr]">
+      <aside className="hidden border-r border-line bg-cream md:flex md:flex-col md:px-5 md:py-6">
         <Logo compact />
         <p className="mt-3 px-3 text-xs font-medium text-muted">{company}</p>
         <nav className="mt-8 flex flex-1 flex-col gap-0.5">
@@ -239,7 +241,7 @@ function Shell({
         </button>
       </aside>
       <div className="pb-36 md:pb-24">
-        <header className="flex items-center justify-between border-b border-line bg-cream px-6 py-4 md:hidden">
+        <header className="flex items-center justify-between border-b border-line bg-cream px-5 py-3 md:hidden">
           <Logo compact />
           <button type="button" onClick={onLogout} className="text-sm font-medium text-muted">
             Uit

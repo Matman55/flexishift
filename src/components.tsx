@@ -4,6 +4,8 @@ import {
   WEEKDAY_META,
   formatDate,
   formatDateLong,
+  formatEuro,
+  formatHours,
   initials,
   osmEmbedUrl,
   osmOpenUrl,
@@ -382,11 +384,13 @@ export function ShiftDetail({
   workplace,
   company,
   onClose,
+  earnings,
 }: {
   request: WorkRequest
   workplace: Workplace
   company: string
   onClose: () => void
+  earnings?: { hours: number; rate: number; pay: number; past?: boolean }
 }) {
   const count = shiftCountdown(request.date, request.startTime, request.endTime)
   useEffect(() => {
@@ -438,6 +442,19 @@ export function ShiftDetail({
             endTime={request.endTime}
             slots={request.slots}
           />
+          {earnings && (
+            <div className="rounded-xl bg-emerald-50 px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
+                {earnings.past ? 'Verdiend' : 'Verwacht loon'}
+              </div>
+              <div className="mt-1 text-lg font-semibold tracking-tight text-ink">
+                {formatEuro(earnings.pay)}
+              </div>
+              <p className="mt-0.5 text-sm text-muted">
+                {formatHours(earnings.hours)} · €{earnings.rate}/u
+              </p>
+            </div>
+          )}
           {request.extras && (
             <p className="text-sm text-muted">
               Jij komt om {request.extras.arriveBy} met de {request.extras.transport}

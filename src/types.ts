@@ -116,6 +116,7 @@ export type WorkRequest = {
   city: string
   extras?: ApplyExtras
   readAt?: string
+  hourlyRate?: number
 }
 
 export type Session = {
