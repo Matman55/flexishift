@@ -1,0 +1,124 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --font-script: "Caveat", cursive;
+  --color-paper: #ffffff;
+  --color-cream: #ffffff;
+  --color-ink: #111111;
+  --color-muted: #5c5c5c;
+  --color-line: #eeeeee;
+  --color-terra: #f5c400;
+  --color-terra-deep: #e0b400;
+  --color-teal: #111111;
+  --color-teal-deep: #111111;
+  --color-gold: #f5c400;
+  --color-ochtend: #fff3c4;
+  --color-namiddag: #f3f3f3;
+  --color-avond: #ececec;
+  --color-flex: #ffe58a;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-sans);
+  letter-spacing: -0.03em;
+}
+
+.font-script {
+  font-family: var(--font-script);
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.blob {
+  border-radius: 42% 58% 56% 44% / 48% 42% 58% 52%;
+}
+.blob-alt {
+  border-radius: 63% 37% 39% 61% / 44% 58% 42% 56%;
+}
+.blob-dots {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.35) 1.15px, transparent 1.2px);
+  background-size: 9px 9px;
+}
+
+.slot-ochtend {
+  background: #fff3c4;
+  color: #7a5b00;
+}
+.slot-namiddag {
+  background: #f3f3f3;
+  color: #3f3f46;
+}
+.slot-avond {
+  background: #111111;
+  color: #ffffff;
+}
+.slot-flexibel {
+  background: #ffe58a;
+  color: #5c4300;
+}
+
+.badge-spoed {
+  background: #fff3c4;
+  color: #7a5b00;
+}
+.badge-pending {
+  background: #fff8e0;
+  color: #8a6d00;
+}
+.badge-ok {
+  background: #ecfdf5;
+  color: #047857;
+}
+.badge-muted {
+  background: #f4f4f5;
+  color: #71717a;
+}
+.badge-accent {
+  background: #fff3c4;
+  color: #7a5b00;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.45;
+}
+
+.mascot-bob {
+  animation: mascot-bob 2.6s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+
+@keyframes mascot-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+

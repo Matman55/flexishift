@@ -1,0 +1,190 @@
+import { weekdayFromIso } from './data'
+import {
+  distanceKm,
+  distanceScore,
+  travelLabel,
+} from './constants'
+import {
+  anyRangeOverlap,
+  dayHoursFromSlots,
+  emptyDayHours,
+  formatDayHours,
+  isDayOpen,
+  jobRange,
+} from './time'
+import type { DayHours, Job, Seeker, Slot, Workplace } from './types'
+
+export function hoursOnDate(seeker: Seeker, date: string): DayHours {
+  if (seeker.blocked.includes(date)) return emptyDayHours()
+  if (seeker.hours && Object.prototype.hasOwnProperty.call(seeker.hours, date)) {
+    return seeker.hours[date]
+  }
+  if (Object.prototype.hasOwnProperty.call(seeker.overrides, date)) {
+    return dayHoursFromSlots(seeker.overrides[date])
+  }
+  return dayHoursFromSlots(seeker.recurring[weekdayFromIso(date)] ?? [])
+}
+
+export function slotsOnDate(seeker: Seeker, date: string): Slot[] {
+  const hours = hoursOnDate(seeker, date)
+  if (hours.flexible) return ['flexibel']
+  const slots: Slot[] = []
+  for (const r of hours.ranges) {
+    if (r.start <= '06:00' && r.end >= '12:00') slots.push('ochtend')
+    else if (r.start < '12:00' && r.end > '06:00') slots.push('ochtend')
+    if (r.start < '18:00' && r.end > '12:00') slots.push('namiddag')
+    if (r.start < '24:00' && r.end > '18:00') slots.push('avond')
+  }
+  return [...new Set(slots)]
+}
+
+export function slotsOverlap(available: Slot[], needed: Slot[]): boolean {
+  if (available.length === 0 || needed.length === 0) return false
+  if (available.includes('flexibel') || needed.includes('flexibel')) return true
+  return needed.some((s) => available.includes(s))
+}
+
+export function skillOverlap(seeker: Seeker, skills: string[]): number {
+  if (skills.length === 0) return 0
+  const set = new Set(seeker.skills)
+  const hits = skills.filter((s) => set.has(s)).length
+  return hits / skills.length
+}
+
+export function cityScore(seekerCity: string, jobCity: string): number {
+  if (seekerCity === jobCity) return 1
+  const neighbours: Record<string, string[]> = {
+    Gent: ['Aalst', 'Brugge', 'Kortrijk'],
+    Antwerpen: ['Mechelen', 'Brussel'],
+    Brussel: ['Leuven', 'Mechelen', 'Antwerpen'],
+    Leuven: ['Brussel', 'Mechelen', 'Hasselt'],
+    Brugge: ['Oostende', 'Gent', 'Kortrijk'],
+    Mechelen: ['Antwerpen', 'Leuven', 'Brussel'],
+    Hasselt: ['Leuven'],
+    Kortrijk: ['Gent', 'Brugge', 'Aalst'],
+    Oostende: ['Brugge'],
+    Aalst: ['Gent', 'Brussel', 'Kortrijk'],
+  }
+  return neighbours[jobCity]?.includes(seekerCity) ? 0.55 : 0.2
+}
+
+export type MatchOpts = {
+  date: string
+  slots: Slot[]
+  startTime?: string
+  endTime?: string
+  skills: string[]
+  city: string
+  urgent?: boolean
+  workplace?: Workplace | null
+  hourlyRate?: number
+  requiresLicense?: boolean
+}
+
+export type MatchResult = {
+  seeker: Seeker
+  score: number
+  available: Slot[]
+  hours: DayHours
+  reasons: string[]
+  distanceKm: number
+  travel: string
+}
+
+export type JobMatch = Job & {
+  score: number
+  reasons: string[]
+  distanceKm: number
+  travel: string
+}
+
+export function scoreSeeker(seeker: Seeker, opts: MatchOpts): MatchResult | null {
+  const hours = hoursOnDate(seeker, opts.date)
+  if (!isDayOpen(hours)) return null
+
+  const needsLicense = opts.requiresLicense || opts.skills.includes('Chauffeur')
+  if (needsLicense && !seeker.hasLicense) return null
+
+  if (opts.hourlyRate != null && opts.hourlyRate < seeker.hourlyRateMin) return null
+
+  const needed = jobRange({
+    slots: opts.slots,
+    startTime: opts.startTime ?? '',
+    endTime: opts.endTime ?? '',
+  })
+  const neededFlexible = opts.slots.includes('flexibel')
+  if (!hours.flexible && !neededFlexible && !anyRangeOverlap(hours.ranges, [needed])) {
+    return null
+  }
+
+  const km = distanceKm(seeker.city, {
+    city: opts.workplace?.city ?? opts.city,
+    lat: opts.workplace?.lat,
+    lng: opts.workplace?.lng,
+  })
+  const maxKm = seeker.hasTransport ? 90 : 28
+  if (km > maxKm) return null
+
+  const skills = skillOverlap(seeker, opts.skills)
+  const dist = distanceScore(km)
+  const lastMinute = opts.urgent && seeker.lastMinute ? 1 : seeker.lastMinute ? 0.4 : 0
+  const rating = (seeker.rating - 4) / 1
+  const score =
+    Math.round(
+      (skills * 38 + dist * 26 + 16 + lastMinute * 12 + Math.max(0, rating) * 8) * 10,
+    ) / 10
+
+  const travel = travelLabel(km, seeker.hasTransport)
+  const reasons: string[] = []
+  reasons.push(hours.flexible ? 'Flexibel die dag' : `Vrij ${formatDayHours(hours)}`)
+  if (skills >= 1) reasons.push('Alle skills')
+  else if (skills >= 0.5) reasons.push('Skills komen overeen')
+  reasons.push(travel)
+  if (opts.urgent && seeker.lastMinute) reasons.push('Last-minute klaar')
+  if (seeker.hasTransport) reasons.push('Eigen vervoer')
+  if (needsLicense && seeker.hasLicense) reasons.push('Rijbewijs B')
+
+  return {
+    seeker,
+    score: Math.min(99, Math.max(42, score)),
+    available: slotsOnDate(seeker, opts.date),
+    hours,
+    reasons,
+    distanceKm: km,
+    travel,
+  }
+}
+
+export function rankSeekers(seekers: Seeker[], opts: MatchOpts): MatchResult[] {
+  return seekers
+    .map((s) => scoreSeeker(s, opts))
+    .filter((m): m is MatchResult => m !== null)
+    .sort((a, b) => b.score - a.score)
+}
+
+export function jobsForSeeker(seeker: Seeker, jobs: Job[]): JobMatch[] {
+  return jobs
+    .filter((j) => j.status === 'open')
+    .map((j) => {
+      const m = scoreSeeker(seeker, {
+        date: j.date,
+        slots: j.slots,
+        startTime: j.startTime,
+        endTime: j.endTime,
+        skills: j.skills,
+        city: j.city,
+        urgent: j.urgent,
+        workplace: j.workplace,
+        hourlyRate: j.hourlyRate,
+        requiresLicense: j.requiresLicense,
+      })
+      return m
+        ? { ...j, score: m.score, reasons: m.reasons, distanceKm: m.distanceKm, travel: m.travel }
+        : null
+    })
+    .filter((j): j is JobMatch => j !== null)
+    .sort((a, b) => {
+      if (a.urgent !== b.urgent) return a.urgent ? -1 : 1
+      return b.score - a.score
+    })
+}
