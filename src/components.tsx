@@ -9,6 +9,8 @@ import {
   initials,
   osmEmbedUrl,
   osmOpenUrl,
+  googleMapsDirUrl,
+  appleMapsDirUrl,
   workplaceLine,
   ensureWorkplace,
   CONTRACT_META,
@@ -17,18 +19,7 @@ import {
 } from './constants'
 import { weekdayFromIso } from './data'
 import { slotsOnDate } from './match'
-import type {
-  ApplyExtras,
-  ContractKind,
-  DayHours,
-  Job,
-  Seeker,
-  Slot,
-  Transport,
-  Weekday,
-  WorkRequest,
-  Workplace,
-} from './types'
+import { WEEKDAYS, type ApplyExtras, type ContractKind, type DayHours, type Job, type Recurring, type Role, type Seeker, type ShiftFeedback, type Slot, type Transport, type Weekday, type WorkRequest, type Workplace } from './types'
 import { formatRange } from './time'
 
 export const cardClass = 'rounded-2xl border border-line bg-cream shadow-[0_10px_30px_rgba(17,17,17,0.06)]'
@@ -39,10 +30,12 @@ export function Avatar({
   name,
   hue,
   size = 'md',
+  photo,
 }: {
   name: string
   hue: number
   size?: 'sm' | 'md' | 'lg'
+  photo?: string
 }) {
   const dim =
     size === 'sm'
@@ -50,6 +43,9 @@ export function Avatar({
       : size === 'lg'
         ? 'h-16 w-16 text-xl rounded-full'
         : 'h-11 w-11 text-sm rounded-full'
+  if (photo) {
+    return <img src={photo} alt="" className={`${dim} shrink-0 object-cover`} />
+  }
   return (
     <div
       className={`${dim} grid place-items-center font-medium text-white shrink-0`}
@@ -58,6 +54,169 @@ export function Avatar({
       }}
     >
       {initials(name || '?')}
+    </div>
+  )
+}
+
+export function SeekerProfile({
+  seeker,
+  onClose,
+  extra,
+}: {
+  seeker: Seeker
+  onClose: () => void
+  extra?: ReactNode
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 sm:items-center sm:p-6"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="seeker-profile-title"
+        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-line bg-cream shadow-2xl sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-line bg-cream/95 px-5 py-4 backdrop-blur">
+          <div className="flex min-w-0 items-start gap-3">
+            <Avatar name={seeker.name} hue={seeker.hue} size="lg" photo={seeker.photo} />
+            <div className="min-w-0">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">Profiel</div>
+              <h2 id="seeker-profile-title" className="mt-0.5 text-lg font-semibold tracking-tight">
+                {seeker.name}
+              </h2>
+              <p className="mt-0.5 flex items-center gap-1 text-sm text-muted">
+                <Icon name="pin" className="h-3.5 w-3.5" /> {seeker.city}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-line bg-cream hover:bg-paper"
+            aria-label="Sluiten"
+          >
+            <Icon name="x" className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="space-y-5 p-5">
+          {seeker.bio && <p className="text-sm leading-relaxed text-muted">{seeker.bio}</p>}
+          <div className="flex flex-wrap gap-1.5 text-[11px] font-medium">
+            {seeker.lastMinute && <span className="badge-accent rounded-md px-2 py-0.5">last-minute</span>}
+            {seeker.hasTransport && <span className="badge-muted rounded-md px-2 py-0.5">eigen vervoer</span>}
+            {seeker.hasLicense && <span className="badge-muted rounded-md px-2 py-0.5">rijbewijs B</span>}
+            <span className="badge-muted rounded-md px-2 py-0.5">vanaf €{seeker.hourlyRateMin}/u</span>
+            <span className="badge-muted rounded-md px-2 py-0.5">{seeker.yearsExperience} jaar ervaring</span>
+          </div>
+          {extra}
+          {seeker.sectors.length > 0 && (
+            <div>
+              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Sectoren</div>
+              <div className="flex flex-wrap gap-1.5">
+                {seeker.sectors.map((s) => (
+                  <span key={s} className="rounded-md bg-terra/25 px-2 py-0.5 text-[11px] font-medium">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {seeker.skills.length > 0 && (
+            <div>
+              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Skills</div>
+              <div className="flex flex-wrap gap-1.5">
+                {seeker.skills.map((s) => (
+                  <span key={s} className="rounded-md bg-paper px-2 py-0.5 text-[11px] font-medium text-muted">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {seeker.languages.length > 0 && (
+            <div>
+              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Talen</div>
+              <p className="text-sm text-ink">{seeker.languages.join(' · ')}</p>
+            </div>
+          )}
+          <div>
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Vaste week</div>
+            <p className="mb-2 text-xs leading-relaxed text-muted">
+              Wanneer deze persoon meestal vrij is. Ochtend 06–12u, namiddag 12–18u, avond 18–00u.
+            </p>
+            <RecurringWeekPreview recurring={seeker.recurring} />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function OpenSeekerProfile({
+  seeker,
+  className = '',
+  children,
+}: {
+  seeker: Seeker
+  className?: string
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button type="button" className={`cursor-pointer ${className}`} onClick={() => setOpen(true)}>
+        {children}
+      </button>
+      {open && <SeekerProfile seeker={seeker} onClose={() => setOpen(false)} />}
+    </>
+  )
+}
+
+export function RecurringWeekPreview({ recurring }: { recurring: Recurring }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-line">
+      {WEEKDAYS.map((day) => {
+        const slots = recurring[day] ?? []
+        return (
+          <div
+            key={day}
+            className="flex items-center justify-between gap-3 border-b border-line px-3 py-2.5 last:border-b-0"
+          >
+            <div className="w-[5.5rem] shrink-0 text-sm font-semibold">{WEEKDAY_META[day].long}</div>
+            <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-1.5">
+              {slots.length === 0 ? (
+                <span className="text-sm text-muted">Niet vrij</span>
+              ) : (
+                slots.map((s) => (
+                  <span
+                    key={s}
+                    className={`slot-${s} rounded-md px-2 py-0.5 text-[11px] font-medium`}
+                  >
+                    {SLOT_META[s].label}
+                    <span className="ml-1 opacity-75">{SLOT_META[s].time}</span>
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -137,6 +296,25 @@ export function ContractBadge({ kind }: { kind: ContractKind }) {
     <span className="rounded-md bg-paper px-2 py-0.5 text-[11px] font-medium text-muted">
       {CONTRACT_META[kind]?.label ?? 'Flexi'}
     </span>
+  )
+}
+
+export function BelgianChecklist({ kind }: { kind: ContractKind }) {
+  return (
+    <div className="rounded-xl border border-line bg-paper px-4 py-3 text-sm leading-relaxed text-muted">
+      <div className="font-semibold text-ink">Checklist voor deze shift</div>
+      <ul className="mt-2 space-y-1">
+        <li>
+          <span className="font-medium text-ink">{CONTRACT_META[kind].label}.</span> {CONTRACT_META[kind].hint}
+        </li>
+        <li>
+          <span className="font-medium text-ink">Dimona</span> geeft de zaak aan — jij hoeft dat niet zelf te doen.
+        </li>
+        <li>
+          Het uurloon op FlexiShift is ter info. Loonfiches lopen via de zaak of het sociaal secretariaat.
+        </li>
+      </ul>
+    </div>
   )
 }
 
@@ -220,15 +398,33 @@ export function WorkplaceCard({ workplace }: { workplace: Workplace }) {
             {wp.notes}
           </p>
         )}
-        <a
-          href={osmOpenUrl(wp)}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink underline decoration-terra decoration-2 underline-offset-4"
-        >
-          Open in kaart
-          <Icon name="arrow" className="h-4 w-4" />
-        </a>
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={googleMapsDirUrl(wp)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-white"
+          >
+            Route Google Maps
+          </a>
+          <a
+            href={appleMapsDirUrl(wp)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-xs font-semibold"
+          >
+            Route Apple Kaarten
+          </a>
+          <a
+            href={osmOpenUrl(wp)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink underline decoration-terra decoration-2 underline-offset-4"
+          >
+            OpenStreetMap
+            <Icon name="arrow" className="h-4 w-4" />
+          </a>
+        </div>
       </div>
     </div>
   )
@@ -306,6 +502,7 @@ export function JobDetail({
           <JobWhen date={job.date} startTime={job.startTime} endTime={job.endTime} slots={job.slots} />
           <p className="text-sm leading-relaxed text-muted">{job.description}</p>
           <p className="text-xs leading-relaxed text-muted">{CONTRACT_META[kind].hint}</p>
+          <BelgianChecklist kind={kind} />
           {job.reasons && job.reasons.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {job.reasons.map((r) => (
@@ -385,14 +582,28 @@ export function ShiftDetail({
   company,
   onClose,
   earnings,
+  role,
+  onOnTheWay,
+  onCancel,
+  onFeedback,
 }: {
   request: WorkRequest
   workplace: Workplace
   company: string
   onClose: () => void
   earnings?: { hours: number; rate: number; pay: number; past?: boolean }
+  role?: Role
+  onOnTheWay?: () => void
+  onCancel?: (reason: string) => void
+  onFeedback?: (fb: ShiftFeedback) => void
 }) {
   const count = shiftCountdown(request.date, request.startTime, request.endTime)
+  const [reason, setReason] = useState('')
+  const [askCancel, setAskCancel] = useState(false)
+  const cancelled = request.status === 'cancelled'
+  const live = request.status === 'accepted' && !count.past
+  const done = request.status === 'accepted' && count.past
+  const fb = role === 'employer' ? request.employerFeedback : request.seekerFeedback
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -423,7 +634,7 @@ export function ShiftDetail({
             <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">Jouw shift</div>
             <h2 className="mt-0.5 text-lg font-semibold tracking-tight">{request.title}</h2>
             <p className="text-sm text-muted">
-              {company} · {count.label}
+              {company} · {cancelled ? 'Geannuleerd' : count.label}
             </p>
           </div>
           <button
@@ -436,13 +647,25 @@ export function ShiftDetail({
           </button>
         </div>
         <div className="space-y-5 p-5">
+          {cancelled && (
+            <div className="rounded-xl bg-zinc-100 px-4 py-3 text-sm text-muted">
+              <span className="font-medium text-ink">Geannuleerd</span>
+              {request.cancelledBy ? ` door de ${request.cancelledBy === 'seeker' ? 'werknemer' : 'zaak'}` : ''}.
+              {request.cancelReason ? ` ${request.cancelReason}` : ''}
+            </div>
+          )}
+          {count.soon && live && (
+            <div className="rounded-xl bg-terra/25 px-4 py-3 text-sm">
+              <span className="font-semibold">Herinnering · {count.label}.</span> Check kleding, adres en bij wie je je meldt.
+            </div>
+          )}
           <JobWhen
             date={request.date}
             startTime={request.startTime}
             endTime={request.endTime}
             slots={request.slots}
           />
-          {earnings && (
+          {earnings && !cancelled && (
             <div className="rounded-xl bg-emerald-50 px-4 py-3">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
                 {earnings.past ? 'Verdiend' : 'Verwacht loon'}
@@ -461,36 +684,108 @@ export function ShiftDetail({
               {request.extras.question ? ` · “${request.extras.question}”` : ''}
             </p>
           )}
+          {request.onTheWayAt && live && (
+            <p className="text-sm font-medium text-ink">Onderweg gemeld.</p>
+          )}
+          {live && (workplace.notes || workplace.access || workplace.contactOnSite) && (
+            <div className="rounded-xl border border-line bg-paper px-4 py-3 text-sm leading-relaxed">
+              <div className="font-semibold text-ink">Voor je vertrekt</div>
+              {workplace.notes && <p className="mt-1.5 text-muted">{workplace.notes}</p>}
+              {workplace.contactOnSite && (
+                <p className="mt-1.5 text-muted">
+                  <span className="font-medium text-ink">Meld je bij · </span>
+                  {workplace.contactOnSite}
+                </p>
+              )}
+              {workplace.access && (
+                <p className="mt-1.5 text-muted">
+                  <span className="font-medium text-ink">Toegang · </span>
+                  {workplace.access}
+                </p>
+              )}
+            </div>
+          )}
           <WorkplaceCard workplace={workplace} />
+          {live && (
+            <div className="flex flex-col gap-2">
+              {onOnTheWay && !request.onTheWayAt && (
+                <PrimaryButton onClick={onOnTheWay} className="w-full">
+                  Ik ben onderweg
+                </PrimaryButton>
+              )}
+              {onCancel && !askCancel && (
+                <GhostButton onClick={() => setAskCancel(true)} className="w-full">
+                  Shift annuleren
+                </GhostButton>
+              )}
+              {onCancel && askCancel && (
+                <div className="space-y-2 rounded-xl border border-line p-3">
+                  <Field label="Korte reden (geen straf, alleen ter info)">
+                    <input
+                      className={inputClass}
+                      value={reason}
+                      placeholder="Ziek, trein gemist, te weinig volk, …"
+                      onChange={(e) => setReason(e.target.value)}
+                    />
+                  </Field>
+                  <div className="flex gap-2">
+                    <PrimaryButton onClick={() => onCancel(reason)} className="!py-2.5">
+                      Bevestig annuleren
+                    </PrimaryButton>
+                    <GhostButton onClick={() => setAskCancel(false)} className="!py-2.5">
+                      Terug
+                    </GhostButton>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {done && onFeedback && (
+            <div className="space-y-3 rounded-xl border border-line p-4">
+              <div className="text-sm font-semibold">Na de shift — geen score, wel nuttig</div>
+              <YesNo
+                label={role === 'employer' ? 'Was de persoon op tijd en aanspreekbaar?' : 'Was de briefing duidelijk?'}
+                value={fb?.briefingOk}
+                onChange={(v) => onFeedback({ ...fb, briefingOk: v })}
+              />
+              <YesNo
+                label="Klopte het adres / de werkplek?"
+                value={fb?.addressOk}
+                onChange={(v) => onFeedback({ ...fb, addressOk: v })}
+              />
+              <YesNo
+                label={role === 'employer' ? 'Wil je deze persoon opnieuw vragen?' : 'Wil je hier opnieuw werken?'}
+                value={fb?.wantAgain}
+                onChange={(v) => onFeedback({ ...fb, wantAgain: v })}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-export function MatchRing({ score }: { score: number }) {
-  const r = 16
-  const c = 2 * Math.PI * r
-  const offset = c - (score / 100) * c
+function YesNo({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value?: boolean
+  onChange: (v: boolean) => void
+}) {
   return (
-    <div className="relative h-12 w-12 shrink-0">
-      <svg viewBox="0 0 40 40" className="h-12 w-12 -rotate-90">
-        <circle cx="20" cy="20" r={r} fill="none" stroke="#eeeeee" strokeWidth="3.5" />
-        <circle
-          cx="20"
-          cy="20"
-          r={r}
-          fill="none"
-          stroke="#f5c400"
-          strokeWidth="3.5"
-          strokeDasharray={c}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-        />
-      </svg>
-      <span className="absolute inset-0 grid place-items-center text-[11px] font-semibold text-ink">
-        {Math.round(score)}
-      </span>
+    <div>
+      <div className="text-sm text-ink">{label}</div>
+      <div className="mt-1.5 flex gap-2">
+        <Chip active={value === true} onClick={() => onChange(true)}>
+          Ja
+        </Chip>
+        <Chip active={value === false} onClick={() => onChange(false)}>
+          Nee
+        </Chip>
+      </div>
     </div>
   )
 }

@@ -42,8 +42,8 @@ export type Seeker = {
   yearsExperience: number
   hourlyRateMin: number
   lastMinute: boolean
-  rating: number
   jobsDone: number
+  photo?: string
   recurring: Recurring
   hours: Record<string, DayHours>
   overrides: Record<string, Slot[]>
@@ -60,6 +60,7 @@ export type Employer = {
   hue: number
   onboardingDone: boolean
   favorites: string[]
+  savedSearches?: SavedSearch[]
   workplace?: Workplace
 }
 
@@ -97,7 +98,24 @@ export type Job = {
   requiresLicense?: boolean
 }
 
-export type RequestStatus = 'pending' | 'accepted' | 'declined'
+export type RequestStatus = 'pending' | 'accepted' | 'declined' | 'cancelled'
+
+export type ShiftFeedback = {
+  briefingOk?: boolean
+  addressOk?: boolean
+  wantAgain?: boolean
+}
+
+export type SavedSearch = {
+  id: string
+  label: string
+  date: string
+  startTime: string
+  endTime: string
+  skills: string[]
+  city: string
+  urgent: boolean
+}
 
 export type WorkRequest = {
   id: string
@@ -117,6 +135,12 @@ export type WorkRequest = {
   extras?: ApplyExtras
   readAt?: string
   hourlyRate?: number
+  cancelledAt?: string
+  cancelReason?: string
+  cancelledBy?: Role
+  onTheWayAt?: string
+  seekerFeedback?: ShiftFeedback
+  employerFeedback?: ShiftFeedback
 }
 
 export type Session = {

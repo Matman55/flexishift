@@ -40,6 +40,25 @@ export function completedShifts(requests: WorkRequest[], seekerId: string): Work
     .sort((a, b) => `${b.date}${b.startTime ?? ''}`.localeCompare(`${a.date}${a.startTime ?? ''}`))
 }
 
+export type WorkedTogether = {
+  seekerId: string
+  last: WorkRequest
+  count: number
+}
+
+export function peopleWhoWorkedFor(requests: WorkRequest[], employerId: string): WorkedTogether[] {
+  const done = requests
+    .filter((r) => r.employerId === employerId && isCompletedShift(r))
+    .sort((a, b) => `${b.date}${b.startTime ?? ''}`.localeCompare(`${a.date}${a.startTime ?? ''}`))
+  const map = new Map<string, WorkedTogether>()
+  for (const r of done) {
+    const cur = map.get(r.seekerId)
+    if (cur) cur.count += 1
+    else map.set(r.seekerId, { seekerId: r.seekerId, last: r, count: 1 })
+  }
+  return [...map.values()]
+}
+
 export function monthKey(iso: string): string {
   return iso.slice(0, 7)
 }
@@ -88,4 +107,57 @@ export function earningsByMonth(shifts: WorkRequest[], jobs: Job[], fallback: nu
       pay: Math.round(b.pay * 100) / 100,
       hours: Math.round(b.hours * 100) / 100,
     }))
+}
+
+export function hoursCsv(
+  shifts: WorkRequest[],
+  jobs: Job[],
+  fallback: number,
+  companyOf: (r: WorkRequest) => string,
+): string {
+  const rows = [
+    ['Datum', 'Titel', 'Zaak', 'Van', 'Tot', 'Uren', 'Tarief', 'Loon'].join(','),
+    ...shifts.map((r) => {
+      const hours = shiftHours(r)
+      const rate = shiftRate(r, jobs, fallback)
+      const pay = shiftPay(r, jobs, fallback)
+      const cells = [
+        r.date,
+        r.title,
+        companyOf(r),
+        r.startTime ?? '',
+        r.endTime ?? '',
+        String(hours).replace('.', ','),
+        String(rate),
+        String(pay).replace('.', ','),
+      ]
+      return cells.map((c) => `"${c.replaceAll('"', '""')}"`).join(',')
+    }),
+  ]
+  return rows.join('\n')
+}
+
+export function downloadCsv(filename: string, csv: string) {
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export function datesInWeek(from = new Date()): string[] {
+  const d = new Date(from)
+  d.setHours(12, 0, 0, 0)
+  const mondayOffset = d.getDay() === 0 ? -6 : 1 - d.getDay()
+  d.setDate(d.getDate() + mondayOffset)
+  return Array.from({ length: 7 }, (_, i) => {
+    const n = new Date(d)
+    n.setDate(d.getDate() + i)
+    const y = n.getFullYear()
+    const m = String(n.getMonth() + 1).padStart(2, '0')
+    const day = String(n.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  })
 }

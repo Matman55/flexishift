@@ -131,8 +131,8 @@ export function Logo({
     <img
       src={`${import.meta.env.BASE_URL}logo.png`}
       alt="FlexiShift"
-      className="w-auto max-w-[min(100%,36rem)] object-contain object-left"
-      style={{ height: compact ? 140 : 168 }}
+      className="block w-auto max-w-[min(100%,36rem)] bg-transparent object-contain object-left"
+      style={{ height: compact ? 140 : 168, backgroundColor: 'transparent' }}
     />
   )
 }

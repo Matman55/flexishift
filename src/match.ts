@@ -166,11 +166,7 @@ export function scoreSeeker(seeker: Seeker, opts: MatchOpts): MatchResult | null
   const skills = skillOverlap(seeker, opts.skills)
   const dist = distanceScore(km)
   const lastMinute = opts.urgent && seeker.lastMinute ? 1 : seeker.lastMinute ? 0.4 : 0
-  const rating = (seeker.rating - 4) / 1
-  const score =
-    Math.round(
-      (skills * 38 + dist * 26 + 16 + lastMinute * 12 + Math.max(0, rating) * 8) * 10,
-    ) / 10
+  const score = Math.round((skills * 42 + dist * 30 + 16 + lastMinute * 12) * 10) / 10
 
   const travel = travelLabel(km, seeker.hasTransport)
   const reasons: string[] = []

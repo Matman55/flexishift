@@ -19,6 +19,7 @@ import type {
   Slot,
   Weekday,
   WorkRequest,
+  SavedSearch,
 } from './types'
 
 const KEY = 'flexishift-v2'
@@ -38,6 +39,7 @@ function load(): AppState {
             ...e,
             onboardingDone: e.onboardingDone !== false,
             favorites: e.favorites ?? [],
+            savedSearches: e.savedSearches ?? [],
             workplace: e.workplace ?? workplaceFromCity(e.city),
           })),
           jobs: parsed.jobs.map((j) => {
@@ -101,6 +103,10 @@ type Store = AppState & {
   addJob: (job: Omit<Job, 'id' | 'status'>) => string
   addRequest: (req: Omit<WorkRequest, 'id' | 'createdAt' | 'status'>) => void
   setRequestStatus: (id: string, status: WorkRequest['status']) => void
+  patchRequest: (id: string, patch: Partial<WorkRequest>) => void
+  cancelRequest: (id: string, by: Role, reason: string) => void
+  saveSearch: (employerId: string, search: Omit<SavedSearch, 'id'>) => void
+  removeSearch: (employerId: string, searchId: string) => void
   markRequestsRead: (role: Role, id: string) => void
   resetDemo: () => void
 }
@@ -152,7 +158,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       yearsExperience: 1,
       hourlyRateMin: 14,
       lastMinute: true,
-      rating: 5,
       jobsDone: 0,
       recurring: emptyRecurring(),
       hours: {},
@@ -178,6 +183,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       hue: Math.floor(Math.random() * 360),
       onboardingDone: false,
       favorites: [],
+      savedSearches: [],
       workplace: workplaceFromCity('Gent'),
     }
     commit((p) => ({
@@ -356,6 +362,77 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [commit],
   )
 
+  const patchRequest = useCallback(
+    (id: string, patch: Partial<WorkRequest>) => {
+      commit((p) => ({
+        ...p,
+        requests: p.requests.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+      }))
+    },
+    [commit],
+  )
+
+  const cancelRequest = useCallback(
+    (id: string, by: Role, reason: string) => {
+      commit((p) => {
+        const prev = p.requests.find((r) => r.id === id)
+        const nextReqs = p.requests.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                status: 'cancelled' as const,
+                cancelledAt: new Date().toISOString(),
+                cancelledBy: by,
+                cancelReason: reason.trim() || 'Geen reden opgegeven',
+                readAt: undefined,
+              }
+            : r,
+        )
+        const req = nextReqs.find((r) => r.id === id)
+        const jobs = p.jobs.map((j) => {
+          if (!req?.jobId || j.id !== req.jobId) return j
+          const filled = nextReqs.filter((r) => r.jobId === j.id && r.status === 'accepted').length
+          return { ...j, status: filled >= j.peopleNeeded ? ('filled' as const) : ('open' as const) }
+        })
+        const seekers = p.seekers.map((s) => {
+          if (!req || s.id !== req.seekerId) return s
+          if (prev?.status === 'accepted') return { ...s, jobsDone: Math.max(0, s.jobsDone - 1) }
+          return s
+        })
+        return { ...p, requests: nextReqs, jobs, seekers }
+      })
+    },
+    [commit],
+  )
+
+  const saveSearch = useCallback(
+    (employerId: string, search: Omit<SavedSearch, 'id'>) => {
+      commit((p) => ({
+        ...p,
+        employers: p.employers.map((e) =>
+          e.id === employerId
+            ? { ...e, savedSearches: [{ ...search, id: uid('q') }, ...(e.savedSearches ?? [])].slice(0, 6) }
+            : e,
+        ),
+      }))
+    },
+    [commit],
+  )
+
+  const removeSearch = useCallback(
+    (employerId: string, searchId: string) => {
+      commit((p) => ({
+        ...p,
+        employers: p.employers.map((e) =>
+          e.id === employerId
+            ? { ...e, savedSearches: (e.savedSearches ?? []).filter((s) => s.id !== searchId) }
+            : e,
+        ),
+      }))
+    },
+    [commit],
+  )
+
   const markRequestsRead = useCallback(
     (role: Role, id: string) => {
       commit((p) => ({
@@ -392,6 +469,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addJob,
       addRequest,
       setRequestStatus,
+      patchRequest,
+      cancelRequest,
+      saveSearch,
+      removeSearch,
       markRequestsRead,
       resetDemo,
     }),
@@ -411,6 +492,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addJob,
       addRequest,
       setRequestStatus,
+      patchRequest,
+      cancelRequest,
+      saveSearch,
+      removeSearch,
       markRequestsRead,
       resetDemo,
     ],

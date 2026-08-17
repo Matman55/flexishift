@@ -7,7 +7,6 @@ import {
   GhostButton,
   Icon,
   JobDetail,
-  MatchRing,
   PingBanner,
   PrimaryButton,
   ShiftDetail,
@@ -38,15 +37,34 @@ import { useStore } from './store'
 import {
   completedShifts,
   currentMonthKey,
+  downloadCsv,
   earningsByMonth,
+  hoursCsv,
   isCompletedShift,
   shiftHours,
   shiftPay,
   shiftRate,
 } from './earnings'
-import type { ApplyExtras, DayHours, Job, Seeker, Slot, Weekday, WorkRequest } from './types'
+import type { ApplyExtras, DayHours, Job, Seeker, ShiftFeedback, Slot, Weekday, WorkRequest } from './types'
 
-type Tab = 'home' | 'cal' | 'jobs' | 'done' | 'inbox' | 'profile'
+type Tab = 'home' | 'cal' | 'jobs' | 'inbox' | 'profile'
+
+function seekerShiftHandlers(
+  store: ReturnType<typeof useStore>,
+  r: WorkRequest,
+  onDone?: () => void,
+) {
+  return {
+    role: 'seeker' as const,
+    onOnTheWay: () =>
+      store.patchRequest(r.id, { onTheWayAt: new Date().toISOString(), readAt: undefined }),
+    onCancel: (reason: string) => {
+      store.cancelRequest(r.id, 'seeker', reason)
+      onDone?.()
+    },
+    onFeedback: (fb: ShiftFeedback) => store.patchRequest(r.id, { seekerFeedback: fb }),
+  }
+}
 
 function payInfo(r: WorkRequest, jobs: Job[], fallback: number, past?: boolean) {
   return {
@@ -55,6 +73,34 @@ function payInfo(r: WorkRequest, jobs: Job[], fallback: number, past?: boolean) 
     pay: shiftPay(r, jobs, fallback),
     past,
   }
+}
+
+function resizePhoto(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      const size = 256
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        URL.revokeObjectURL(url)
+        reject(new Error('canvas'))
+        return
+      }
+      const min = Math.min(img.width, img.height)
+      ctx.drawImage(img, (img.width - min) / 2, (img.height - min) / 2, min, min, 0, 0, size, size)
+      URL.revokeObjectURL(url)
+      resolve(canvas.toDataURL('image/jpeg', 0.82))
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('img'))
+    }
+    img.src = url
+  })
 }
 
 export function SeekerApp() {
@@ -83,8 +129,11 @@ export function SeekerApp() {
   const ping = inbox.find(
     (r) =>
       !r.readAt &&
-      ((r.from === 'employer' && r.status === 'pending') || r.status === 'accepted'),
+      ((r.from === 'employer' && r.status === 'pending') ||
+        r.status === 'accepted' ||
+        r.status === 'cancelled'),
   )
+  const soon = shifts.find((s) => shiftCountdown(s.date, s.startTime, s.endTime).soon)
 
   const sendApply = (job: Job, extras: ApplyExtras) => {
     const q = extras.question ? ` ${extras.question}` : ''
@@ -117,13 +166,27 @@ export function SeekerApp() {
       onLogout={store.logout}
       toast={toast}
       banner={
-        ping && tab !== 'inbox' ? (
+        soon && tab !== 'cal' ? (
           <PingBanner
-            title={ping.status === 'accepted' ? 'Shift bevestigd' : 'Nieuwe aanvraag'}
+            title={soon.onTheWayAt ? 'Shift straks — je bent onderweg' : 'Herinnering'}
+            text={`${soon.title} · ${formatDateLong(soon.date)} ${soon.startTime ?? ''}`.trim()}
+            onClick={() => setTab('home')}
+          />
+        ) : ping && tab !== 'inbox' ? (
+          <PingBanner
+            title={
+              ping.status === 'cancelled'
+                ? 'Shift geannuleerd'
+                : ping.status === 'accepted'
+                  ? 'Shift bevestigd'
+                  : 'Nieuwe aanvraag'
+            }
             text={
-              ping.status === 'accepted'
-                ? `${ping.title} · ${formatDateLong(ping.date)} ${ping.startTime ?? ''}`.trim()
-                : `${store.employers.find((e) => e.id === ping.employerId)?.company ?? 'Een zaak'} zoekt je ${formatDateLong(ping.date)}${ping.startTime ? ` ${ping.startTime}–${ping.endTime}` : ''}`
+              ping.status === 'cancelled'
+                ? `${ping.title} · ${ping.cancelReason ?? 'Geen reden'}`
+                : ping.status === 'accepted'
+                  ? `${ping.title} · ${formatDateLong(ping.date)} ${ping.startTime ?? ''}`.trim()
+                  : `${store.employers.find((e) => e.id === ping.employerId)?.company ?? 'Een zaak'} zoekt je ${formatDateLong(ping.date)}${ping.startTime ? ` ${ping.startTime}–${ping.endTime}` : ''}`
             }
             onClick={() => {
               store.markRequestsRead('seeker', seeker.id)
@@ -140,7 +203,7 @@ export function SeekerApp() {
           shifts={shifts}
           onOpenJobs={() => setTab('jobs')}
           onOpenCal={() => setTab('cal')}
-          onOpenHistory={() => setTab('done')}
+          onOpenHistory={() => setTab('cal')}
           onApply={sendApply}
         />
       )}
@@ -169,7 +232,6 @@ export function SeekerApp() {
           onApply={sendApply}
         />
       )}
-      {tab === 'done' && <HistoryPane seeker={seeker} />}
       {tab === 'inbox' && (
         <InboxPane
           seeker={seeker}
@@ -202,11 +264,10 @@ function Shell({
   banner?: ReactNode
   children: ReactNode
 }) {
-  const items: { id: Tab; label: string; icon: 'home' | 'cal' | 'brief' | 'check' | 'inbox' | 'user' }[] = [
+  const items: { id: Tab; label: string; icon: 'home' | 'cal' | 'brief' | 'inbox' | 'user' }[] = [
     { id: 'home', label: 'Home', icon: 'home' },
     { id: 'cal', label: 'Kalender', icon: 'cal' },
     { id: 'jobs', label: 'Jobs', icon: 'brief' },
-    { id: 'done', label: 'Gedaan', icon: 'check' },
     { id: 'inbox', label: 'Inbox', icon: 'inbox' },
     { id: 'profile', label: 'Profiel', icon: 'user' },
   ]
@@ -247,7 +308,7 @@ function Shell({
         </header>
         <main className="mx-auto max-w-3xl px-6 py-8 md:max-w-4xl md:px-10 md:py-10">{children}</main>
       </div>
-      <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-6 border-t border-line bg-cream/95 px-1 py-2 backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-line bg-cream/95 px-1 py-2 backdrop-blur md:hidden">
         {items.map((it) => (
           <button
             key={it.id}
@@ -432,6 +493,7 @@ function Home({
           company={store.employers.find((e) => e.id === openShift.employerId)?.company ?? ''}
           earnings={payInfo(openShift, store.jobs, seeker.hourlyRateMin, isCompletedShift(openShift))}
           onClose={() => setOpenShift(null)}
+          {...seekerShiftHandlers(store, openShift, () => setOpenShift(null))}
         />
       )}
     </div>
@@ -489,7 +551,6 @@ function JobCard({
         tabIndex={0}
       >
         <div className="flex items-start gap-3">
-          {job.score != null && <MatchRing score={job.score} />}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="font-medium">{job.title}</h3>
@@ -600,6 +661,8 @@ function CalendarPane({
         Handig als je in shiften werkt. Daarna: “Vaste week toepassen” om die uren op de kalender te zetten. Per dag kun je nog finetunen.
       </p>
       <WeekEditor recurring={seeker.recurring} onChange={onRecurring} />
+
+      <HistoryPane seeker={seeker} nested />
     </div>
   )
 }
@@ -683,6 +746,9 @@ function InboxPane({
     const emp = store.employers.find((e) => e.id === r.employerId)
     return emp?.workplace ?? workplaceFromCity(r.city)
   }
+  const liveShift = openShift
+    ? (store.requests.find((r) => r.id === openShift.id) ?? openShift)
+    : null
   return (
     <div>
       <Guide
@@ -742,7 +808,7 @@ function InboxPane({
                   </GhostButton>
                 </div>
               )}
-              {r.status === 'accepted' && (
+              {(r.status === 'accepted' || r.status === 'cancelled') && (
                 <GhostButton onClick={() => setOpenShift(r)} className="mt-4 !py-2.5">
                   Open shiftkaart
                 </GhostButton>
@@ -751,20 +817,21 @@ function InboxPane({
           )
         })}
       </div>
-      {openShift && (
+      {liveShift && (
         <ShiftDetail
-          request={openShift}
-          workplace={wpFor(openShift)}
-          company={store.employers.find((e) => e.id === openShift.employerId)?.company ?? ''}
-          earnings={payInfo(openShift, store.jobs, seeker.hourlyRateMin, isCompletedShift(openShift))}
+          request={liveShift}
+          workplace={wpFor(liveShift)}
+          company={store.employers.find((e) => e.id === liveShift.employerId)?.company ?? ''}
+          earnings={payInfo(liveShift, store.jobs, seeker.hourlyRateMin, isCompletedShift(liveShift))}
           onClose={() => setOpenShift(null)}
+          {...seekerShiftHandlers(store, liveShift, () => setOpenShift(null))}
         />
       )}
     </div>
   )
 }
 
-function HistoryPane({ seeker }: { seeker: Seeker }) {
+function HistoryPane({ seeker, nested }: { seeker: Seeker; nested?: boolean }) {
   const store = useStore()
   const [openShift, setOpenShift] = useState<WorkRequest | null>(null)
   const done = completedShifts(store.requests, seeker.id)
@@ -784,15 +851,34 @@ function HistoryPane({ seeker }: { seeker: Seeker }) {
 
   return (
     <div>
-      <Guide
-        pose="point"
-        title="Jouw jobs en loon"
-        text="Elke afgeronde shift blijft hier staan. Tik een maand aan om te zien wat je toen verdiende."
-      />
-      <h1 className="text-3xl font-semibold tracking-tight">Gedaan</h1>
+      {!nested && (
+        <Guide
+          pose="point"
+          title="Jouw jobs en loon"
+          text="Elke afgeronde shift blijft hier staan. Tik een maand aan om te zien wat je toen verdiende."
+        />
+      )}
+      {nested ? (
+        <h2 className="mt-10 text-lg font-semibold tracking-tight">Gedaan en loon</h2>
+      ) : (
+        <h1 className="text-3xl font-semibold tracking-tight">Gedaan</h1>
+      )}
       <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">
         Terugvinden wat je al gedaan hebt, en hoeveel je per maand uitbetaald kreeg.
       </p>
+      <GhostButton
+        className="mt-4 !py-2 text-xs"
+        onClick={() =>
+          downloadCsv(
+            'flexishift-uren.csv',
+            hoursCsv(done, store.jobs, seeker.hourlyRateMin, (r) => {
+              return store.employers.find((e) => e.id === r.employerId)?.company ?? r.city
+            }),
+          )
+        }
+      >
+        Download uren (CSV)
+      </GhostButton>
 
       <div className="mt-8 grid grid-cols-2 gap-4">
         <div className={`${cardClass} p-5`}>
@@ -897,6 +983,7 @@ function HistoryPane({ seeker }: { seeker: Seeker }) {
           company={store.employers.find((e) => e.id === openShift.employerId)?.company ?? ''}
           earnings={payInfo(openShift, store.jobs, seeker.hourlyRateMin, true)}
           onClose={() => setOpenShift(null)}
+          {...seekerShiftHandlers(store, openShift, () => setOpenShift(null))}
         />
       )}
     </div>
@@ -908,11 +995,13 @@ function StatusBadge({ status }: { status: string }) {
     pending: 'badge-pending',
     accepted: 'badge-ok',
     declined: 'badge-muted',
+    cancelled: 'badge-muted',
   }
   const label: Record<string, string> = {
     pending: 'Open',
     accepted: 'Bevestigd',
     declined: 'Afgewezen',
+    cancelled: 'Geannuleerd',
   }
   return (
     <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${map[status]}`}>
@@ -936,12 +1025,23 @@ function ProfilePane({ seeker }: { seeker: Seeker }) {
       />
       <div className={`${cardClass} p-6`}>
         <div className="flex items-center gap-4">
-          <Avatar name={draft.name} hue={draft.hue} size="lg" />
+          <Avatar name={draft.name} hue={draft.hue} size="lg" photo={draft.photo} />
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">{draft.name}</h1>
-            <p className="mt-1 text-sm text-muted">
-              ★ {draft.rating} · {draft.jobsDone} opdrachten
-            </p>
+            <p className="mt-1 text-sm text-muted">{draft.jobsDone} opdrachten</p>
+            <label className="mt-2 inline-block cursor-pointer text-sm font-semibold text-ink underline decoration-terra decoration-2 underline-offset-4">
+              Foto kiezen
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  void resizePhoto(file).then((photo) => setDraft((d) => ({ ...d, photo })))
+                }}
+              />
+            </label>
           </div>
         </div>
       </div>

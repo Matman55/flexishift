@@ -191,6 +191,14 @@ export function osmOpenUrl(wp: Workplace): string {
   return `https://www.openstreetmap.org/?mlat=${wp.lat}&mlon=${wp.lng}#map=17/${wp.lat}/${wp.lng}`
 }
 
+export function googleMapsDirUrl(wp: Workplace): string {
+  return `https://www.google.com/maps/dir/?api=1&destination=${wp.lat},${wp.lng}`
+}
+
+export function appleMapsDirUrl(wp: Workplace): string {
+  return `https://maps.apple.com/?daddr=${wp.lat},${wp.lng}`
+}
+
 export function workplaceLine(wp: Workplace): string {
   return `${wp.address}, ${wp.postal} ${wp.city}`
 }
@@ -277,18 +285,19 @@ export function shiftCountdown(date: string, startTime?: string, endTime?: strin
   label: string
   urgent: boolean
   past: boolean
+  soon: boolean
 } {
   const startH = startTime && startTime !== '24:00' ? startTime : '09:00'
   const start = new Date(`${date}T${startH}:00`)
   const endH = !endTime || endTime === '24:00' ? '23:59' : endTime
   const end = new Date(`${date}T${endH}:00`)
   const now = new Date()
-  if (now.getTime() > end.getTime()) return { label: 'Voorbij', urgent: false, past: true }
-  if (now.getTime() >= start.getTime()) return { label: 'Nu bezig', urgent: true, past: false }
+  if (now.getTime() > end.getTime()) return { label: 'Voorbij', urgent: false, past: true, soon: false }
+  if (now.getTime() >= start.getTime()) return { label: 'Nu bezig', urgent: true, past: false, soon: true }
   const mins = Math.round((start.getTime() - now.getTime()) / 60000)
-  if (mins < 60) return { label: `Nog ${mins} min`, urgent: true, past: false }
+  if (mins < 60) return { label: `Nog ${mins} min`, urgent: true, past: false, soon: true }
   const hours = Math.round(mins / 60)
-  if (hours < 24) return { label: `Nog ${hours} u`, urgent: hours <= 6, past: false }
+  if (hours < 24) return { label: `Nog ${hours} u`, urgent: hours <= 6, past: false, soon: mins <= 120 }
   const days = Math.round(hours / 24)
-  return { label: `Over ${days} dag${days === 1 ? '' : 'en'}`, urgent: false, past: false }
+  return { label: `Over ${days} dag${days === 1 ? '' : 'en'}`, urgent: false, past: false, soon: false }
 }

@@ -1,15 +1,17 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Avatar,
   Chip,
   Field,
   GhostButton,
   Icon,
-  MatchRing,
+  OpenSeekerProfile,
   PingBanner,
   PrimaryButton,
+  ShiftDetail,
   HourPills,
   WorkplaceCard,
+  BelgianChecklist,
   cardClass,
   inputClass,
 } from './components'
@@ -23,6 +25,7 @@ import {
   defaultContract,
   ensureWorkplace,
   formatDateLong,
+  formatEuro,
   isoDate,
   shiftCountdown,
   workplaceFromCity,
@@ -30,10 +33,11 @@ import {
 import { Logo } from './Landing'
 import { EmptyMascot, Guide } from './Mascot'
 import { rankSeekers, bookedBySeekerOnDate } from './match'
+import { peopleWhoWorkedFor, isCompletedShift, datesInWeek, shiftPay, hoursCsv, downloadCsv } from './earnings'
 import { slotsFromRange } from './time'
 import { useStore } from './store'
 import type { MatchResult } from './match'
-import type { ContractKind, Employer, Slot } from './types'
+import type { ContractKind, Employer, SavedSearch, Seeker, Slot, WorkRequest } from './types'
 
 type Tab = 'home' | 'search' | 'post' | 'jobs' | 'inbox'
 
@@ -66,7 +70,13 @@ export function EmployerApp() {
   const myJobs = store.jobs.filter((j) => j.employerId === employer.id)
   const inbox = store.requests.filter((r) => r.employerId === employer.id)
   const pending = inbox.filter((r) => r.status === 'pending' && r.from === 'seeker').length
-  const ping = inbox.find((r) => !r.readAt && r.from === 'seeker' && r.status === 'pending')
+  const ping = inbox.find(
+    (r) =>
+      !r.readAt &&
+      ((r.from === 'seeker' && r.status === 'pending') ||
+        (r.status === 'cancelled' && r.cancelledBy === 'seeker') ||
+        Boolean(r.onTheWayAt && r.status === 'accepted')),
+  )
 
   return (
     <Shell
@@ -82,8 +92,20 @@ export function EmployerApp() {
       banner={
         ping && tab !== 'inbox' ? (
           <PingBanner
-            title="Nieuwe sollicitatie"
-            text={`${store.seekers.find((s) => s.id === ping.seekerId)?.name ?? 'Iemand'} voor ${ping.title}`}
+            title={
+              ping.status === 'cancelled'
+                ? 'Shift geannuleerd'
+                : ping.onTheWayAt
+                  ? 'Onderweg'
+                  : 'Nieuwe sollicitatie'
+            }
+            text={
+              ping.status === 'cancelled'
+                ? `${store.seekers.find((s) => s.id === ping.seekerId)?.name ?? 'Iemand'} zegde ${ping.title} af`
+                : ping.onTheWayAt
+                  ? `${store.seekers.find((s) => s.id === ping.seekerId)?.name ?? 'Iemand'} is onderweg naar ${ping.title}`
+                  : `${store.seekers.find((s) => s.id === ping.seekerId)?.name ?? 'Iemand'} voor ${ping.title}`
+            }
             onClick={() => {
               store.markRequestsRead('employer', employer.id)
               setTab('inbox')
@@ -96,6 +118,7 @@ export function EmployerApp() {
         <Home
           company={employer.company}
           city={employer.city}
+          employerId={employer.id}
           jobs={myJobs.length}
           pending={pending}
           onSpoed={() => {
@@ -111,7 +134,20 @@ export function EmployerApp() {
             setTab('search')
           }}
           onSearch={() => setTab('search')}
+          onOpenSearch={(q) => {
+            setPrefill({
+              date: q.date,
+              slots: slotsFromRange(q.startTime, q.endTime),
+              startTime: q.startTime,
+              endTime: q.endTime,
+              skills: q.skills,
+              city: q.city,
+              urgent: q.urgent,
+            })
+            setTab('search')
+          }}
           onPost={() => setTab('post')}
+          onAsked={(name) => pingToast(`Opnieuw gevraagd aan ${name}`)}
         />
       )}
       {tab === 'search' && (
@@ -179,6 +215,7 @@ export function EmployerApp() {
             store.setRequestStatus(id, status)
             pingToast(status === 'accepted' ? 'Bevestigd' : 'Afgewezen')
           }}
+          onAsked={(name) => pingToast(`Opnieuw gevraagd aan ${name}`)}
         />
       )}
     </Shell>
@@ -277,26 +314,48 @@ function Shell({
 function Home({
   company,
   city,
+  employerId,
   jobs,
   pending,
   onSpoed,
   onSearch,
+  onOpenSearch,
   onPost,
+  onAsked,
 }: {
   company: string
   city: string
+  employerId: string
   jobs: number
   pending: number
   onSpoed: () => void
   onSearch: () => void
+  onOpenSearch: (q: SavedSearch) => void
   onPost: () => void
+  onAsked: (name: string) => void
 }) {
+  const store = useStore()
+  const employer = store.employers.find((e) => e.id === employerId)
+  const alumni = peopleWhoWorkedFor(store.requests, employerId)
+    .map((p) => ({ ...p, seeker: store.seekers.find((s) => s.id === p.seekerId) }))
+    .filter((p): p is typeof p & { seeker: Seeker } => Boolean(p.seeker))
+  const [ask, setAsk] = useState<(typeof alumni)[number] | null>(null)
+  const week = datesInWeek()
+  const planned = store.requests.filter(
+    (r) => r.employerId === employerId && r.status === 'accepted' && week.includes(r.date),
+  )
+  const weekCost = planned.reduce((sum, r) => {
+    const s = store.seekers.find((x) => x.id === r.seekerId)
+    return sum + shiftPay(r, store.jobs, s?.hourlyRateMin ?? 14)
+  }, 0)
+  const saved = employer?.savedSearches ?? []
+
   return (
     <div>
       <Guide
         pose="search"
         title="Personeel vinden"
-        text="Iemand ziek of extra drukte? Tik op spoed. Ik zoek wie écht vrij is op dat uur."
+        text="Iemand ziek of extra drukte? Tik op spoed. Of vraag iemand die al bij jou werkte opnieuw."
       />
       <p className="text-sm font-medium text-muted">{company} · {city}</p>
       <h1 className="mt-1 text-3xl font-semibold tracking-tight">
@@ -338,9 +397,264 @@ function Home({
           <div className="mt-1 text-xs font-medium uppercase tracking-wide text-muted">open berichten</div>
         </div>
       </div>
+      {saved.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold tracking-tight">Bewaarde zoekopdrachten</h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {saved.map((q) => (
+              <span key={q.id} className="inline-flex items-center gap-1 rounded-lg border border-line">
+                <button
+                  type="button"
+                  onClick={() => onOpenSearch(q)}
+                  className="px-3 py-1.5 text-sm font-medium hover:bg-zinc-50"
+                >
+                  {q.label}
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Verwijder ${q.label}`}
+                  onClick={() => store.removeSearch(employerId, q.id)}
+                  className="px-2 py-1.5 text-muted hover:text-ink"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+      <section className="mt-10">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Deze week</h2>
+            <p className="mt-1 text-sm text-muted">
+              Wie komt wanneer. Indicatieve loonkost: {formatEuro(weekCost, true)}.
+            </p>
+          </div>
+          {planned.length > 0 && (
+            <GhostButton
+              className="!py-2 text-xs"
+              onClick={() =>
+                downloadCsv(
+                  'flexishift-week.csv',
+                  hoursCsv(planned, store.jobs, 14, (r) => {
+                    return store.seekers.find((s) => s.id === r.seekerId)?.name ?? r.city
+                  }),
+                )
+              }
+            >
+              Export CSV
+            </GhostButton>
+          )}
+        </div>
+        <div className="mt-4 space-y-3">
+          {week.map((d) => {
+            const dayShifts = planned
+              .filter((r) => r.date === d)
+              .sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''))
+            return (
+              <div key={d} className={`${cardClass} p-4`}>
+                <div className="text-sm font-semibold capitalize">{formatDateLong(d)}</div>
+                {dayShifts.length === 0 ? (
+                  <p className="mt-1 text-sm text-muted">Niemand gepland</p>
+                ) : (
+                  <ul className="mt-2 space-y-2">
+                    {dayShifts.map((r) => {
+                      const s = store.seekers.find((x) => x.id === r.seekerId)
+                      const pay = shiftPay(r, store.jobs, s?.hourlyRateMin ?? 14)
+                      return (
+                        <li key={r.id} className="flex items-center justify-between gap-3 text-sm">
+                          <span>
+                            <span className="font-medium">{s?.name ?? 'Onbekend'}</span>
+                            {' · '}
+                            {r.title}
+                            {r.startTime ? ` · ${r.startTime}–${r.endTime}` : ''}
+                            {r.onTheWayAt ? ' · onderweg' : ''}
+                          </span>
+                          <span className="shrink-0 font-semibold">{formatEuro(pay)}</span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </section>
+      {alumni.length > 0 && (
+        <section className="mt-10">
+          <h2 className="text-lg font-semibold tracking-tight">Opnieuw vragen</h2>
+          <p className="mt-1 text-sm text-muted">
+            Mensen die al een shift bij jou deden. Vraag ze opnieuw voor een nieuwe dag.
+          </p>
+          <div className="mt-4 space-y-3">
+            {alumni.map((p) => (
+              <article key={p.seekerId} className={`${cardClass} flex items-center gap-3 p-4`}>
+                <OpenSeekerProfile
+                  seeker={p.seeker}
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                >
+                  <Avatar name={p.seeker.name} hue={p.seeker.hue} photo={p.seeker.photo} />
+                  <span className="min-w-0">
+                    <span className="block font-medium hover:underline">{p.seeker.name}</span>
+                    <span className="block text-sm text-muted">
+                      Laatst: {p.last.title} · {formatDateLong(p.last.date)}
+                      {p.count > 1 ? ` · ${p.count} shiften` : ''}
+                    </span>
+                  </span>
+                </OpenSeekerProfile>
+                <PrimaryButton onClick={() => setAsk(p)} className="!px-3.5 !py-2 text-xs sm:text-sm">
+                  Vraag opnieuw
+                </PrimaryButton>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
       <GhostButton onClick={onPost} className="mt-6">
         Nieuwe opdracht plaatsen
       </GhostButton>
+      {ask && employer && (
+        <AskAgainDialog
+          employer={employer}
+          seeker={ask.seeker}
+          last={ask.last}
+          onClose={() => setAsk(null)}
+          onSent={() => {
+            onAsked(ask.seeker.name)
+            setAsk(null)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function AskAgainDialog({
+  employer,
+  seeker,
+  last,
+  onClose,
+  onSent,
+}: {
+  employer: Employer
+  seeker: Seeker
+  last: WorkRequest
+  onClose: () => void
+  onSent: () => void
+}) {
+  const store = useStore()
+  const [date, setDate] = useState(isoDate(0))
+  const [startTime, setStartTime] = useState(last.startTime ?? '18:00')
+  const [endTime, setEndTime] = useState(last.endTime ?? '23:00')
+  const [title, setTitle] = useState(last.title)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
+  const send = () => {
+    const already = store.requests.some(
+      (r) =>
+        r.employerId === employer.id &&
+        r.seekerId === seeker.id &&
+        r.date === date &&
+        r.status === 'pending',
+    )
+    if (already) {
+      setError('Je vroeg deze persoon al voor die dag. Wacht op een antwoord.')
+      return
+    }
+    store.addRequest({
+      jobId: last.jobId,
+      employerId: employer.id,
+      seekerId: seeker.id,
+      from: 'employer',
+      message: `Hey ${seeker.name.split(' ')[0]}, ${employer.company} vraagt je opnieuw voor “${title}” op ${formatDateLong(date)} van ${startTime} tot ${endTime}. Past dat?`,
+      date,
+      slots: slotsFromRange(startTime, endTime),
+      startTime,
+      endTime,
+      title,
+      city: employer.city,
+      hourlyRate: last.hourlyRate ?? seeker.hourlyRateMin,
+    })
+    onSent()
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 sm:items-center sm:p-6"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-line bg-cream shadow-2xl sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">Opnieuw vragen</div>
+            <h2 className="mt-0.5 text-lg font-semibold tracking-tight">
+              <OpenSeekerProfile seeker={seeker} className="hover:underline">
+                {seeker.name}
+              </OpenSeekerProfile>
+            </h2>
+            <p className="text-sm text-muted">Laatst: {last.title} · {formatDateLong(last.date)}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-line hover:bg-paper"
+            aria-label="Sluiten"
+          >
+            <Icon name="x" className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="space-y-4 p-5">
+          <Field label="Wat voor shift?">
+            <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} />
+          </Field>
+          <Field label="Nieuwe dag">
+            <input
+              type="date"
+              className={inputClass}
+              value={date}
+              min={isoDate(0)}
+              max={isoDate(21)}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </Field>
+          <div>
+            <div className="mb-2 text-sm font-medium text-ink">Uren</div>
+            <TimeRangePicker
+              start={startTime}
+              end={endTime}
+              onChange={(s, e) => {
+                setStartTime(s)
+                setEndTime(e)
+              }}
+            />
+          </div>
+          {error && <p className="text-sm text-muted">{error}</p>}
+          <PrimaryButton onClick={send} className="w-full">
+            Stuur aanvraag
+          </PrimaryButton>
+        </div>
+      </div>
     </div>
   )
 }
@@ -379,6 +693,7 @@ function SearchPane({
   const [skills, setSkills] = useState<string[]>(prefill?.skills ?? ['Bediening'])
   const [urgent, setUrgent] = useState(prefill?.urgent ?? false)
   const [onlyLastMinute, setOnlyLastMinute] = useState(prefill?.urgent ?? false)
+  const [savedNote, setSavedNote] = useState<string | null>(null)
   const slots = slotsFromRange(startTime, endTime)
 
   const results = useMemo(() => {
@@ -486,6 +801,24 @@ function SearchPane({
             Alleen last-minute
           </Chip>
         </div>
+        <GhostButton
+          onClick={() => {
+            store.saveSearch(employer.id, {
+              label: `${formatDateLong(date)} ${startTime}–${endTime}${urgent ? ' · spoed' : ''}`,
+              date,
+              startTime,
+              endTime,
+              skills,
+              city,
+              urgent,
+            })
+            setSavedNote('Zoekopdracht bewaard — je vindt ze terug op Home.')
+            window.setTimeout(() => setSavedNote(null), 2400)
+          }}
+        >
+          Bewaar deze zoekopdracht
+        </GhostButton>
+        {savedNote && <p className="text-sm font-medium text-ink">{savedNote}</p>}
       </div>
 
       <div className="mt-8 flex items-end justify-between">
@@ -547,30 +880,29 @@ function CandidateCard({
   return (
     <article className={`${cardClass} p-5`}>
       <div className="flex gap-3">
-        <Avatar name={s.name} hue={s.hue} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <h3 className="font-medium">{s.name}</h3>
-              <p className="mt-0.5 flex items-center gap-1 text-xs text-muted">
-                <Icon name="pin" className="h-3.5 w-3.5" /> {match.travel} · ★ {s.rating} · {s.jobsDone} jobs
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {onToggleFavorite && (
-                <button
-                  type="button"
-                  onClick={onToggleFavorite}
-                  className={`grid h-9 w-9 place-items-center rounded-full border ${favorite ? 'border-terra bg-terra/30 text-ink' : 'border-line text-muted'}`}
-                  aria-label={favorite ? 'Favoriet verwijderen' : 'Bewaar als favoriet'}
-                >
-                  <Icon name="star" className="h-4 w-4" />
-                </button>
-              )}
-              <MatchRing score={match.score} />
-            </div>
-          </div>
-        </div>
+        <OpenSeekerProfile seeker={s} className="flex min-w-0 flex-1 gap-3 text-left">
+          <Avatar name={s.name} hue={s.hue} photo={s.photo} />
+          <span className="min-w-0 flex-1">
+            <span className="flex items-start justify-between gap-2">
+              <span>
+                <span className="block font-medium hover:underline">{s.name}</span>
+                <span className="mt-0.5 flex items-center gap-1 text-xs text-muted">
+                  <Icon name="pin" className="h-3.5 w-3.5" /> {match.travel}
+                </span>
+              </span>
+            </span>
+          </span>
+        </OpenSeekerProfile>
+        {onToggleFavorite && (
+          <button
+            type="button"
+            onClick={onToggleFavorite}
+            className={`grid h-9 w-9 shrink-0 place-items-center rounded-full border ${favorite ? 'border-terra bg-terra/30 text-ink' : 'border-line text-muted'}`}
+            aria-label={favorite ? 'Favoriet verwijderen' : 'Bewaar als favoriet'}
+          >
+            <Icon name="star" className="h-4 w-4" />
+          </button>
+        )}
       </div>
       <p className="mt-4 line-clamp-2 text-sm text-muted">{s.bio}</p>
       <div className="mt-4">
@@ -775,6 +1107,7 @@ function PostPane({
               ))}
             </select>
             <p className="mt-1.5 text-xs text-muted">{CONTRACT_META[contractKind].hint}</p>
+            <BelgianChecklist kind={contractKind} />
           </Field>
           <div>
             <div className="mb-2 text-sm font-medium text-ink">Skills</div>
@@ -827,14 +1160,17 @@ function PostPane({
           <p className="mt-1 text-xs text-muted">{preview.length} mensen vrij op dit moment</p>
           <div className="mt-4 space-y-3">
             {preview.map((m) => (
-              <div key={m.seeker.id} className={`${cardClass} flex items-center gap-3 p-3`}>
-                <Avatar name={m.seeker.name} hue={m.seeker.hue} size="sm" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">{m.seeker.name}</div>
+              <OpenSeekerProfile
+                key={m.seeker.id}
+                seeker={m.seeker}
+                className={`${cardClass} flex w-full items-center gap-3 p-3 text-left`}
+              >
+                <Avatar name={m.seeker.name} hue={m.seeker.hue} size="sm" photo={m.seeker.photo} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold hover:underline">{m.seeker.name}</span>
                   <HourPills hours={m.hours} />
-                </div>
-                <MatchRing score={m.score} />
-              </div>
+                </span>
+              </OpenSeekerProfile>
             ))}
           </div>
         </div>
@@ -941,18 +1277,28 @@ function JobsPane({
 function InboxPane({
   employerId,
   onStatus,
+  onAsked,
 }: {
   employerId: string
   onStatus: (id: string, status: 'accepted' | 'declined') => void
+  onAsked: (name: string) => void
 }) {
   const store = useStore()
+  const employer = store.employers.find((e) => e.id === employerId)
   const items = store.requests.filter((r) => r.employerId === employerId)
+  const [ask, setAsk] = useState<{ seeker: Seeker; last: WorkRequest } | null>(null)
+  const [openShift, setOpenShift] = useState<WorkRequest | null>(null)
+  const wpFor = (r: WorkRequest) => {
+    const job = r.jobId ? store.jobs.find((j) => j.id === r.jobId) : undefined
+    if (job) return ensureWorkplace(job)
+    return employer?.workplace ?? workplaceFromCity(r.city)
+  }
   return (
     <div>
       <Guide
         pose="hint"
         title="Inbox"
-        text="Sollicitaties en jouw aanvragen komen hier. Aanvaarden of afwijzen doe je met één tik."
+        text="Sollicitaties en jouw aanvragen komen hier. Na een gedane shift kun je iemand opnieuw vragen."
       />
       <h1 className="text-3xl font-semibold tracking-tight">Inbox</h1>
       <div className="mt-6 space-y-3">
@@ -965,29 +1311,52 @@ function InboxPane({
         )}
         {items.map((r) => {
           const seeker = store.seekers.find((s) => s.id === r.seekerId)
+          const done = isCompletedShift(r)
           return (
             <article key={r.id} className={`${cardClass} p-5`}>
               <div className="flex items-start gap-3">
-                {seeker && <Avatar name={seeker.name} hue={seeker.hue} />}
+                {seeker ? (
+                  <OpenSeekerProfile seeker={seeker} className="shrink-0 rounded-full">
+                    <Avatar name={seeker.name} hue={seeker.hue} photo={seeker.photo} />
+                  </OpenSeekerProfile>
+                ) : null}
                 <div className="flex-1">
                   <div className="text-xs font-medium text-muted">
                     {r.from === 'seeker' ? 'Sollicitatie' : 'Jouw aanvraag'}
                   </div>
                   <h3 className="mt-1 font-medium">{r.title}</h3>
                   <p className="text-sm text-muted">
-                    {seeker?.name} · {formatDateLong(r.date)}
+                    {seeker ? (
+                      <OpenSeekerProfile seeker={seeker} className="font-medium text-ink hover:underline">
+                        {seeker.name}
+                      </OpenSeekerProfile>
+                    ) : (
+                      'Onbekend'
+                    )}
+                    {' · '}
+                    {formatDateLong(r.date)}
                   </p>
                 </div>
                 <span
                   className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${
-                    r.status === 'pending'
-                      ? 'badge-pending'
-                      : r.status === 'accepted'
-                        ? 'badge-ok'
-                        : 'badge-muted'
+                    done
+                      ? 'badge-ok'
+                      : r.status === 'pending'
+                        ? 'badge-pending'
+                        : r.status === 'accepted'
+                          ? 'badge-ok'
+                          : 'badge-muted'
                   }`}
                 >
-                  {r.status === 'pending' ? 'Open' : r.status === 'accepted' ? 'Bevestigd' : 'Afgewezen'}
+                  {r.status === 'cancelled'
+                    ? 'Geannuleerd'
+                    : done
+                    ? 'Gedaan'
+                    : r.status === 'pending'
+                      ? 'Open'
+                      : r.status === 'accepted'
+                        ? 'Bevestigd'
+                        : 'Afgewezen'}
                 </span>
               </div>
               <p className="mt-4 text-sm leading-relaxed text-muted">{r.message}</p>
@@ -1008,10 +1377,46 @@ function InboxPane({
                   </GhostButton>
                 </div>
               )}
+              {(r.status === 'accepted' || r.status === 'cancelled') && (
+                <GhostButton onClick={() => setOpenShift(r)} className="mt-4 !py-2.5">
+                  Open shiftkaart
+                </GhostButton>
+              )}
+              {done && seeker && (
+                <GhostButton onClick={() => setAsk({ seeker, last: r })} className="mt-4 !py-2.5">
+                  Vraag opnieuw
+                </GhostButton>
+              )}
             </article>
           )
         })}
       </div>
+      {openShift && employer && (
+        <ShiftDetail
+          request={store.requests.find((r) => r.id === openShift.id) ?? openShift}
+          workplace={wpFor(openShift)}
+          company={employer.company}
+          role="employer"
+          onClose={() => setOpenShift(null)}
+          onCancel={(reason) => {
+            store.cancelRequest(openShift.id, 'employer', reason)
+            setOpenShift(null)
+          }}
+          onFeedback={(fb) => store.patchRequest(openShift.id, { employerFeedback: fb })}
+        />
+      )}
+      {ask && employer && (
+        <AskAgainDialog
+          employer={employer}
+          seeker={ask.seeker}
+          last={ask.last}
+          onClose={() => setAsk(null)}
+          onSent={() => {
+            onAsked(ask.seeker.name)
+            setAsk(null)
+          }}
+        />
+      )}
     </div>
   )
 }

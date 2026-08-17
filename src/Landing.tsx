@@ -1,10 +1,16 @@
-import { SLOT_META } from './constants'
 import { SEEKERS } from './data'
-import { Avatar, DarkButton, Icon, PrimaryButton, SlotPills } from './components'
-import { Guide, Logo, Mascot } from './Mascot'
-import type { Slot, Weekday } from './types'
+import {
+  Avatar,
+  DarkButton,
+  Icon,
+  OpenSeekerProfile,
+  PrimaryButton,
+  RecurringWeekPreview,
+  SlotPills,
+} from './components'
+import { Guide, Logo } from './Mascot'
+import type { Slot } from './types'
 
-const demoDays: Weekday[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 const emma = SEEKERS[0]
 
 const sectors = [
@@ -75,7 +81,12 @@ export function Landing({
           <div className="blob-alt absolute -right-2 bottom-10 h-28 w-28 bg-zinc-200" />
           <div className="blob blob-dots absolute -left-4 top-16 h-24 w-24 bg-ink" />
           <div className="absolute inset-0 flex items-end justify-center pb-2">
-            <Mascot pose="search" size={300} bob />
+            <img
+              src={`${import.meta.env.BASE_URL}flexi.png`}
+              alt="Flexi, de mascotte van FlexiShift"
+              className="mascot-bob h-[340px] w-auto max-w-full bg-transparent object-contain sm:h-[380px]"
+              style={{ backgroundColor: 'transparent' }}
+            />
           </div>
         </div>
       </section>
@@ -174,42 +185,88 @@ export function Landing({
       </section>
 
       <section className="relative z-10 mx-auto max-w-6xl px-6 pb-8">
-        <div className="overflow-hidden rounded-3xl bg-zinc-50 p-5 shadow-inner sm:p-8">
-          <div className="mb-6 flex items-end justify-between gap-3">
-            <div>
-              <div className="text-sm font-medium text-muted">Vaste week van Emma · verpleegkundige in shiften</div>
-              <div className="mt-1 text-2xl font-extrabold tracking-tight">Wanneer ben ik vrij?</div>
-            </div>
-            <div className="hidden items-center gap-2 sm:flex">
-              {(['ochtend', 'namiddag', 'avond', 'flexibel'] as Slot[]).map((s) => (
-                <span key={s} className={`slot-${s} rounded-md px-2 py-0.5 text-[11px] font-medium`}>
-                  {SLOT_META[s].label}
+        <p className="font-script text-3xl text-terra">Zo ziet de app eruit</p>
+        <h2 className="text-3xl font-extrabold tracking-tight">Kalender, shiftkaart, loon — geen scores</h2>
+        <div className="mt-8 grid items-start gap-6 lg:grid-cols-2">
+          <div className="rounded-[2rem] border border-line bg-white p-4 shadow-[0_18px_40px_rgba(17,17,17,0.08)] sm:p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted">Kalender · augustus</div>
+                <div className="mt-0.5 text-lg font-extrabold tracking-tight">Emma’s week</div>
+              </div>
+              <div className="flex gap-2 text-[11px] font-medium">
+                <span className="rounded-md border border-terra/50 bg-terra/20 px-2 py-0.5">Vrij</span>
+                <span className="rounded-md bg-ink px-2 py-0.5 text-white">Gepland</span>
+                <span className="rounded-md border border-emerald-700/40 bg-emerald-50 px-2 py-0.5 text-emerald-950">
+                  Gedaan
                 </span>
+              </div>
+            </div>
+            <div className="grid grid-cols-7 gap-1.5">
+              {[
+                { d: 'Ma', kind: 'open' as const, n: '17' },
+                { d: 'Di', kind: 'open' as const, n: '18' },
+                { d: 'Wo', kind: 'worked' as const, n: '19' },
+                { d: 'Do', kind: 'planned' as const, n: '20' },
+                { d: 'Vr', kind: 'open' as const, n: '21' },
+                { d: 'Za', kind: 'empty' as const, n: '22' },
+                { d: 'Zo', kind: 'empty' as const, n: '23' },
+              ].map((c) => (
+                <div
+                  key={c.d}
+                  className={`min-h-[88px] rounded-xl border p-2 ${
+                    c.kind === 'planned'
+                      ? 'border-ink bg-ink text-white'
+                      : c.kind === 'worked'
+                        ? 'border-emerald-700/35 bg-emerald-50 text-emerald-950'
+                        : c.kind === 'open'
+                          ? 'border-terra/50 bg-terra/20'
+                          : 'border-line bg-zinc-50 text-muted'
+                  }`}
+                >
+                  <div className="text-[10px] font-bold uppercase tracking-wide opacity-70">{c.d}</div>
+                  <div className="mt-0.5 text-sm font-semibold">{c.n}</div>
+                  {c.kind === 'planned' && <div className="mt-3 text-[10px] leading-tight">18–23u De Kroon</div>}
+                  {c.kind === 'worked' && <div className="mt-3 text-[10px] font-semibold">✓ bar</div>}
+                  {c.kind === 'open' && <div className="mt-3 text-[10px]">vrij</div>}
+                </div>
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-7 gap-2">
-            {demoDays.map((day) => {
-              const slots = emma.recurring[day]
-              const labels = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo']
-              const i = demoDays.indexOf(day)
-              return (
-                <div key={day} className="rounded-2xl bg-white p-2 sm:p-3">
-                  <div className="mb-2 text-center text-[11px] font-bold uppercase tracking-wide text-muted">
-                    {labels[i]}
-                  </div>
-                  <div className="flex min-h-[88px] flex-col gap-1">
-                    {slots.length === 0 ? (
-                      <div className="flex flex-1 items-center justify-center text-[10px] text-muted/70">—</div>
-                    ) : (
-                      slots.map((s) => (
-                        <div key={s} className={`slot-${s} h-6 rounded-md sm:h-8`} title={SLOT_META[s].label} />
-                      ))
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-white p-5 shadow-[0_10px_30px_rgba(17,17,17,0.06)]">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">Jouw shift</div>
+              <h3 className="mt-1 text-xl font-bold tracking-tight">Bediening avondshift</h3>
+              <p className="mt-1 text-sm text-muted">Café De Kroon · Vrijdagmarkt 12, Gent · 18:00–23:00</p>
+              <p className="mt-3 text-sm leading-relaxed text-muted">
+                Zwarte kleding, schone schoenen. Ingang via de zijdeur. Meld je bij Annelies.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-white">Route Google Maps</span>
+                <span className="rounded-lg border border-line px-3 py-2 text-xs font-semibold">Ik ben onderweg</span>
+              </div>
+            </div>
+            <div className="rounded-2xl bg-white p-5 shadow-[0_10px_30px_rgba(17,17,17,0.06)]">
+              <h3 className="text-xl font-bold tracking-tight">Deze week bij de zaak</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                Emma vrijdag 18–23u · indicatieve loonkost in één oogopslag · uren exporteren voor de boekhouder.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="relative z-10 mx-auto max-w-6xl px-6 pb-8">
+        <div className="overflow-hidden rounded-3xl bg-zinc-50 p-5 shadow-inner sm:p-8">
+          <div className="mb-6">
+            <div className="text-sm font-medium text-muted">Vaste week van Emma · verpleegkundige in shiften</div>
+            <div className="mt-1 text-2xl font-extrabold tracking-tight">Wanneer ben ik vrij?</div>
+            <p className="mt-2 max-w-xl text-sm text-muted">
+              Geen vage kleurblokjes: per dag zie je ochtend, namiddag of avond — met de uren erbij.
+            </p>
+          </div>
+          <div className="rounded-2xl bg-white p-2 sm:p-4">
+            <RecurringWeekPreview recurring={emma.recurring} />
           </div>
         </div>
       </section>
@@ -219,11 +276,15 @@ export function Landing({
         <h2 className="text-3xl font-extrabold tracking-tight">Mensen die nu klaarstaan</h2>
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {SEEKERS.slice(0, 6).map((s) => (
-            <div key={s.id} className="rounded-2xl bg-white p-5 shadow-[0_10px_30px_rgba(17,17,17,0.06)]">
+            <OpenSeekerProfile
+              key={s.id}
+              seeker={s}
+              className="rounded-2xl bg-white p-5 text-left shadow-[0_10px_30px_rgba(17,17,17,0.06)] transition-colors hover:border-terra/40"
+            >
               <div className="flex items-start gap-3">
-                <Avatar name={s.name} hue={s.hue} />
+                <Avatar name={s.name} hue={s.hue} photo={s.photo} />
                 <div className="min-w-0">
-                  <div className="font-bold">{s.name}</div>
+                  <div className="font-bold hover:underline">{s.name}</div>
                   <div className="mt-0.5 flex items-center gap-1 text-xs text-muted">
                     <Icon name="pin" className="h-3.5 w-3.5" /> {s.city}
                     {s.lastMinute && (
@@ -240,7 +301,7 @@ export function Landing({
                   slots={[...new Set(Object.values(s.recurring).flat())].slice(0, 4) as Slot[]}
                 />
               </div>
-            </div>
+            </OpenSeekerProfile>
           ))}
         </div>
       </section>

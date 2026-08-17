@@ -23,7 +23,6 @@ export const SEEKERS: Seeker[] = [
     yearsExperience: 4,
     hourlyRateMin: 14,
     lastMinute: true,
-    rating: 4.9,
     jobsDone: 27,
     recurring: rec({
       tue: w(['namiddag', 'avond']),
@@ -51,7 +50,6 @@ export const SEEKERS: Seeker[] = [
     yearsExperience: 6,
     hourlyRateMin: 15,
     lastMinute: true,
-    rating: 4.8,
     jobsDone: 41,
     recurring: rec({
       mon: w(['avond']),
@@ -80,7 +78,6 @@ export const SEEKERS: Seeker[] = [
     yearsExperience: 3,
     hourlyRateMin: 13,
     lastMinute: false,
-    rating: 4.7,
     jobsDone: 18,
     recurring: rec({
       mon: w(['ochtend']),
@@ -108,7 +105,6 @@ export const SEEKERS: Seeker[] = [
     yearsExperience: 8,
     hourlyRateMin: 16,
     lastMinute: true,
-    rating: 4.9,
     jobsDone: 33,
     recurring: rec({
       mon: w(['flexibel']),
@@ -134,7 +130,6 @@ export const SEEKERS: Seeker[] = [
     yearsExperience: 2,
     hourlyRateMin: 13,
     lastMinute: false,
-    rating: 4.6,
     jobsDone: 12,
     recurring: rec({
       mon: w(['namiddag']),
@@ -162,7 +157,6 @@ export const SEEKERS: Seeker[] = [
     yearsExperience: 5,
     hourlyRateMin: 14,
     lastMinute: true,
-    rating: 4.5,
     jobsDone: 22,
     recurring: rec({
       mon: w(['avond']),
@@ -189,7 +183,6 @@ export const SEEKERS: Seeker[] = [
     yearsExperience: 3,
     hourlyRateMin: 14,
     lastMinute: false,
-    rating: 4.8,
     jobsDone: 19,
     recurring: rec({
       mon: w(['avond']),
@@ -219,7 +212,6 @@ export const SEEKERS: Seeker[] = [
     yearsExperience: 5,
     hourlyRateMin: 15,
     lastMinute: true,
-    rating: 4.9,
     jobsDone: 48,
     recurring: rec({
       mon: w(['flexibel']),
@@ -246,7 +238,6 @@ export const SEEKERS: Seeker[] = [
     yearsExperience: 7,
     hourlyRateMin: 15,
     lastMinute: false,
-    rating: 4.8,
     jobsDone: 15,
     recurring: rec({
       fri: w(['avond']),
@@ -272,7 +263,6 @@ export const SEEKERS: Seeker[] = [
     yearsExperience: 4,
     hourlyRateMin: 14,
     lastMinute: true,
-    rating: 4.6,
     jobsDone: 21,
     recurring: rec({
       mon: w(['ochtend', 'namiddag']),
@@ -300,7 +290,6 @@ export const SEEKERS: Seeker[] = [
     yearsExperience: 6,
     hourlyRateMin: 14,
     lastMinute: true,
-    rating: 4.7,
     jobsDone: 36,
     recurring: rec({
       mon: w(['flexibel']),
@@ -328,7 +317,6 @@ export const SEEKERS: Seeker[] = [
     yearsExperience: 9,
     hourlyRateMin: 16,
     lastMinute: true,
-    rating: 4.8,
     jobsDone: 52,
     recurring: rec({
       tue: w(['flexibel']),
@@ -875,3 +863,4 @@ export function mergeDemoWorkedRequests(existing: WorkRequest[]): WorkRequest[] 
   const missing = demoWorked.filter((r) => !ids.has(r.id))
   return missing.length ? [...patched, ...missing] : patched
 }
+
