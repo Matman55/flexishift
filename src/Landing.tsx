@@ -17,14 +17,10 @@ const sectors = [
 export function Landing({
   onDemoSeeker,
   onDemoEmployer,
-  onNewSeeker,
-  onNewEmployer,
   onReset,
 }: {
   onDemoSeeker: () => void
   onDemoEmployer: () => void
-  onNewSeeker: () => void
-  onNewEmployer: () => void
   onReset: () => void
 }) {
   return (
@@ -81,33 +77,6 @@ export function Landing({
           <div className="absolute inset-0 flex items-end justify-center pb-2">
             <Mascot pose="search" size={300} bob />
           </div>
-        </div>
-      </section>
-
-      <section className="relative z-10 mx-auto max-w-6xl px-6 pb-8">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { t: 'Ik zoek werk', d: 'Demo als Emma · shiften in de zorg', onClick: onDemoSeeker },
-            { t: 'Ik zoek personeel', d: 'Demo als Café De Kroon', onClick: onDemoEmployer },
-            { t: 'Nieuw profiel', d: 'Kort CV in drie vragen', onClick: onNewSeeker },
-            { t: 'Nieuwe zaak', d: 'Naam, stad, adres — klaar', onClick: onNewEmployer },
-          ].map((item) => (
-            <button
-              key={item.t}
-              type="button"
-              onClick={item.onClick}
-              className="flex items-center gap-3 rounded-2xl bg-white p-4 text-left shadow-[0_10px_30px_rgba(17,17,17,0.06)] transition-transform duration-150 hover:-translate-y-0.5"
-            >
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-terra">
-                <Icon name="check" className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block font-bold">{item.t}</span>
-                <span className="block text-sm text-muted">{item.d}</span>
-              </span>
-              <Icon name="chevron" className="h-4 w-4 text-muted" />
-            </button>
-          ))}
         </div>
       </section>
 

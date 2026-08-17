@@ -12,8 +12,6 @@ function Gate() {
     <Landing
       onDemoSeeker={() => store.login('seeker', 's-emma')}
       onDemoEmployer={() => store.login('employer', 'e-kroon')}
-      onNewSeeker={() => store.startNewSeeker()}
-      onNewEmployer={() => store.startNewEmployer()}
       onReset={() => store.resetDemo()}
     />
   )
