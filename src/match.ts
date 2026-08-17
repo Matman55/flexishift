@@ -6,15 +6,17 @@ import {
 } from './constants'
 import {
   anyRangeOverlap,
+  applyBookedHours,
   dayHoursFromSlots,
   emptyDayHours,
   formatDayHours,
   isDayOpen,
   jobRange,
+  rangeFromSlots,
 } from './time'
-import type { DayHours, Job, Seeker, Slot, Workplace } from './types'
+import type { DayHours, Job, Seeker, Slot, TimeRange, WorkRequest, Workplace } from './types'
 
-export function hoursOnDate(seeker: Seeker, date: string): DayHours {
+export function plannedHoursOnDate(seeker: Seeker, date: string): DayHours {
   if (seeker.blocked.includes(date)) return emptyDayHours()
   if (seeker.hours && Object.prototype.hasOwnProperty.call(seeker.hours, date)) {
     return seeker.hours[date]
@@ -25,8 +27,41 @@ export function hoursOnDate(seeker: Seeker, date: string): DayHours {
   return dayHoursFromSlots(seeker.recurring[weekdayFromIso(date)] ?? [])
 }
 
-export function slotsOnDate(seeker: Seeker, date: string): Slot[] {
-  const hours = hoursOnDate(seeker, date)
+export function requestTimeRange(req: Pick<WorkRequest, 'slots' | 'startTime' | 'endTime'>): TimeRange {
+  if (req.startTime && req.endTime) return { start: req.startTime, end: req.endTime }
+  return rangeFromSlots(req.slots ?? [])
+}
+
+export function bookedRangesForSeeker(
+  requests: WorkRequest[],
+  seekerId: string,
+): Record<string, TimeRange[]> {
+  const out: Record<string, TimeRange[]> = {}
+  for (const r of requests) {
+    if (r.seekerId !== seekerId || r.status !== 'accepted') continue
+    ;(out[r.date] ??= []).push(requestTimeRange(r))
+  }
+  return out
+}
+
+export function bookedBySeekerOnDate(
+  requests: WorkRequest[],
+  date: string,
+): Record<string, TimeRange[]> {
+  const out: Record<string, TimeRange[]> = {}
+  for (const r of requests) {
+    if (r.status !== 'accepted' || r.date !== date) continue
+    ;(out[r.seekerId] ??= []).push(requestTimeRange(r))
+  }
+  return out
+}
+
+export function hoursOnDate(seeker: Seeker, date: string, booked: TimeRange[] = []): DayHours {
+  return applyBookedHours(plannedHoursOnDate(seeker, date), booked)
+}
+
+export function slotsOnDate(seeker: Seeker, date: string, booked: TimeRange[] = []): Slot[] {
+  const hours = hoursOnDate(seeker, date, booked)
   if (hours.flexible) return ['flexibel']
   const slots: Slot[] = []
   for (const r of hours.ranges) {
@@ -79,6 +114,8 @@ export type MatchOpts = {
   workplace?: Workplace | null
   hourlyRate?: number
   requiresLicense?: boolean
+  booked?: TimeRange[]
+  bookedBySeeker?: Record<string, TimeRange[]>
 }
 
 export type MatchResult = {
@@ -99,7 +136,8 @@ export type JobMatch = Job & {
 }
 
 export function scoreSeeker(seeker: Seeker, opts: MatchOpts): MatchResult | null {
-  const hours = hoursOnDate(seeker, opts.date)
+  const booked = opts.booked ?? opts.bookedBySeeker?.[seeker.id] ?? []
+  const hours = hoursOnDate(seeker, opts.date, booked)
   if (!isDayOpen(hours)) return null
 
   const needsLicense = opts.requiresLicense || opts.skills.includes('Chauffeur')
@@ -147,7 +185,7 @@ export function scoreSeeker(seeker: Seeker, opts: MatchOpts): MatchResult | null
   return {
     seeker,
     score: Math.min(99, Math.max(42, score)),
-    available: slotsOnDate(seeker, opts.date),
+    available: slotsOnDate(seeker, opts.date, booked),
     hours,
     reasons,
     distanceKm: km,
@@ -162,7 +200,11 @@ export function rankSeekers(seekers: Seeker[], opts: MatchOpts): MatchResult[] {
     .sort((a, b) => b.score - a.score)
 }
 
-export function jobsForSeeker(seeker: Seeker, jobs: Job[]): JobMatch[] {
+export function jobsForSeeker(
+  seeker: Seeker,
+  jobs: Job[],
+  bookedByDate: Record<string, TimeRange[]> = {},
+): JobMatch[] {
   return jobs
     .filter((j) => j.status === 'open')
     .map((j) => {
@@ -177,6 +219,7 @@ export function jobsForSeeker(seeker: Seeker, jobs: Job[]): JobMatch[] {
         workplace: j.workplace,
         hourlyRate: j.hourlyRate,
         requiresLicense: j.requiresLicense,
+        booked: bookedByDate[j.date] ?? [],
       })
       return m
         ? { ...j, score: m.score, reasons: m.reasons, distanceKm: m.distanceKm, travel: m.travel }

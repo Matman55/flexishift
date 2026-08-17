@@ -66,6 +66,32 @@ export function anyRangeOverlap(available: TimeRange[], needed: TimeRange[]): bo
   return available.some((a) => needed.some((b) => rangesOverlap(a, b)))
 }
 
+export function subtractRange(available: TimeRange, blocked: TimeRange): TimeRange[] {
+  if (!rangesOverlap(available, blocked)) return [{ ...available }]
+  const out: TimeRange[] = []
+  if (toMinutes(available.start) < toMinutes(blocked.start)) {
+    out.push({ start: available.start, end: blocked.start })
+  }
+  if (toMinutes(available.end) > toMinutes(blocked.end)) {
+    out.push({ start: blocked.end, end: available.end })
+  }
+  return out.filter((r) => toMinutes(r.end) - toMinutes(r.start) >= 15)
+}
+
+export function subtractRanges(available: TimeRange[], blocked: TimeRange[]): TimeRange[] {
+  let cur = available.map((r) => ({ ...r }))
+  for (const b of blocked) {
+    cur = cur.flatMap((a) => subtractRange(a, b))
+  }
+  return mergeRanges(cur)
+}
+
+export function applyBookedHours(hours: DayHours, booked: TimeRange[]): DayHours {
+  if (!booked.length) return hours
+  const base = hours.flexible ? [{ start: '00:00', end: '24:00' }] : hours.ranges
+  return { flexible: false, ranges: subtractRanges(base, booked) }
+}
+
 export function mergeRanges(ranges: TimeRange[]): TimeRange[] {
   const sorted = [...ranges].sort((a, b) => toMinutes(a.start) - toMinutes(b.start))
   const out: TimeRange[] = []

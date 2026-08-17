@@ -29,7 +29,7 @@ import {
 } from './constants'
 import { Logo } from './Landing'
 import { EmptyMascot, Guide } from './Mascot'
-import { rankSeekers } from './match'
+import { rankSeekers, bookedBySeekerOnDate } from './match'
 import { slotsFromRange } from './time'
 import { useStore } from './store'
 import type { MatchResult } from './match'
@@ -391,11 +391,13 @@ function SearchPane({
         city,
         urgent,
         workplace: employer.workplace ?? workplaceFromCity(city),
+        bookedBySeeker: bookedBySeekerOnDate(store.requests, date),
       },
     )
     return onlyLastMinute ? ranked.filter((r) => r.seeker.lastMinute) : ranked
   }, [
     store.seekers,
+    store.requests,
     date,
     slots,
     startTime,
@@ -634,7 +636,7 @@ function PostPane({
 
   const preview = rankSeekers(
     store.seekers.filter((s) => s.onboardingDone),
-    { date, slots, startTime, endTime, skills, city: jobCity, urgent },
+    { date, slots, startTime, endTime, skills, city: jobCity, urgent, bookedBySeeker: bookedBySeekerOnDate(store.requests, date) },
   ).slice(0, 4)
 
   return (
@@ -864,6 +866,7 @@ function JobsPane({
         workplace: selected.workplace,
         hourlyRate: selected.hourlyRate,
         requiresLicense: selected.requiresLicense,
+        bookedBySeeker: bookedBySeekerOnDate(store.requests, selected.date),
       })
     : []
 

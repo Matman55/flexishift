@@ -2,12 +2,13 @@ import { useMemo, useState } from 'react'
 import { WEEKDAY_META, formatDateLong, isoDate } from './constants'
 import { cardClass, Chip, GhostButton, PrimaryButton, inputClass } from './components'
 import { weekdayFromIso } from './data'
-import { hoursOnDate } from './match'
+import { hoursOnDate, plannedHoursOnDate } from './match'
 import {
   TIME_OPTIONS,
   TIME_PRESETS,
   calendarDates,
   emptyDayHours,
+  formatDayHours,
   formatRange,
   hasPreset,
   isDayOpen,
@@ -25,6 +26,14 @@ export type CalendarShift = {
   endTime?: string
 }
 
+function bookedRangesFromShifts(shifts: CalendarShift[]): TimeRange[] {
+  return shifts.map((s) =>
+    s.startTime && s.endTime
+      ? { start: s.startTime, end: s.endTime }
+      : { start: '00:00', end: '24:00' },
+  )
+}
+
 export function AvailabilityCalendar({
   seeker,
   shifts = [],
@@ -39,7 +48,7 @@ export function AvailabilityCalendar({
   const dates = useMemo(() => calendarDates(6), [])
   const today = isoDate(0)
   const [selected, setSelected] = useState(today)
-  const selectedHours = hoursOnDate(seeker, selected)
+  const selectedHours = plannedHoursOnDate(seeker, selected)
   const custom = Object.prototype.hasOwnProperty.call(seeker.hours ?? {}, selected)
   const past = isPastDate(selected)
   const byDate = useMemo(() => {
@@ -50,6 +59,7 @@ export function AvailabilityCalendar({
     return map
   }, [shifts])
   const selectedShifts = byDate[selected] ?? []
+  const remainingHours = hoursOnDate(seeker, selected, bookedRangesFromShifts(selectedShifts))
   const monthTitle = useMemo(() => {
     const first = new Date(dates[0] + 'T12:00:00')
     const last = new Date(dates[dates.length - 1] + 'T12:00:00')
@@ -79,9 +89,10 @@ export function AvailabilityCalendar({
           </div>
           <div className="grid grid-cols-7 gap-1.5">
             {dates.map((date) => {
-              const hours = hoursOnDate(seeker, date)
-              const open = isDayOpen(hours)
               const dayShifts = byDate[date] ?? []
+              const bookedRanges = bookedRangesFromShifts(dayShifts)
+              const hours = hoursOnDate(seeker, date, bookedRanges)
+              const open = isDayOpen(hours)
               const booked = dayShifts.length > 0
               const isSel = date === selected
               const isToday = date === today
@@ -163,8 +174,17 @@ export function AvailabilityCalendar({
               )}
               <div className={selectedShifts.length > 0 ? 'mt-5' : ''}>
                 {selectedShifts.length > 0 && (
-                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
-                    Nog vrij die dag
+                  <div className="mb-3 rounded-xl bg-zinc-50 px-3 py-2.5 text-sm leading-relaxed text-muted">
+                    {isDayOpen(remainingHours) ? (
+                      <>
+                        <span className="font-medium text-ink">Nog vrij voor nieuwe jobs: </span>
+                        {formatDayHours(remainingHours)}. De uren van je shift zijn geblokkeerd.
+                      </>
+                    ) : (
+                      <span className="font-medium text-ink">
+                        Deze dag is volgepland. Werkgevers zien je nu niet meer als vrij.
+                      </span>
+                    )}
                   </div>
                 )}
                 <DayHoursEditor

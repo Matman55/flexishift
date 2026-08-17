@@ -33,7 +33,7 @@ import {
 } from './constants'
 import { Logo } from './Landing'
 import { EmptyMascot, Guide, Mascot } from './Mascot'
-import { jobsForSeeker } from './match'
+import { jobsForSeeker, bookedRangesForSeeker } from './match'
 import { useStore } from './store'
 import type { ApplyExtras, DayHours, Job, Seeker, Slot, Weekday, WorkRequest } from './types'
 
@@ -56,7 +56,7 @@ export function SeekerApp() {
     return <Onboarding seeker={seeker} />
   }
 
-  const matches = jobsForSeeker(seeker, store.jobs)
+  const matches = jobsForSeeker(seeker, store.jobs, bookedRangesForSeeker(store.requests, seeker.id))
   const inbox = store.requests.filter((r) => r.seekerId === seeker.id)
   const pending = inbox.filter((r) => r.status === 'pending' && r.from === 'employer').length
   const shifts = inbox
