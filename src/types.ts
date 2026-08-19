@@ -49,6 +49,9 @@ export type Seeker = {
   overrides: Record<string, Slot[]>
   blocked: string[]
   onboardingDone: boolean
+  email?: string
+  mailPrefs?: MailPrefs
+  userId?: string
 }
 
 export type Employer = {
@@ -62,6 +65,9 @@ export type Employer = {
   favorites: string[]
   savedSearches?: SavedSearch[]
   workplace?: Workplace
+  email?: string
+  mailPrefs?: MailPrefs
+  userId?: string
 }
 
 export type Workplace = {
@@ -96,9 +102,12 @@ export type Job = {
   workplace: Workplace
   contractKind: ContractKind
   requiresLicense?: boolean
+  postedAt?: string
 }
 
 export type RequestStatus = 'pending' | 'accepted' | 'declined' | 'cancelled'
+
+export type RequestKind = 'shift' | 'chat'
 
 export type ShiftFeedback = {
   briefingOk?: boolean
@@ -125,6 +134,7 @@ export type WorkRequest = {
   from: Role
   message: string
   status: RequestStatus
+  kind?: RequestKind
   createdAt: string
   date: string
   slots: Slot[]
@@ -143,10 +153,52 @@ export type WorkRequest = {
   employerFeedback?: ShiftFeedback
 }
 
+export function isChatThread(r: Pick<WorkRequest, 'kind'>): boolean {
+  return r.kind === 'chat'
+}
+
+export type MailKind = 'ask' | 'apply' | 'accepted' | 'declined' | 'cancelled' | 'message' | 'job' | 'welcome'
+
+export type MailPrefs = {
+  enabled: boolean
+  ask: boolean
+  apply: boolean
+  accepted: boolean
+  declined: boolean
+  cancelled: boolean
+  message: boolean
+  job: boolean
+  welcome: boolean
+}
+
+export type ChatMessage = {
+  id: string
+  requestId: string
+  from: Role
+  text: string
+  createdAt: string
+  readBySeeker: boolean
+  readByEmployer: boolean
+}
+
+export type MailLogItem = {
+  id: string
+  at: string
+  to: string
+  toName: string
+  kind: MailKind
+  subject: string
+  preview: string
+  skipped: boolean
+  error?: string
+}
+
 export type Session = {
   role: Role
   seekerId: string
   employerId: string
+  userId?: string
+  email?: string
 }
 
 export type AppState = {
@@ -155,4 +207,6 @@ export type AppState = {
   employers: Employer[]
   jobs: Job[]
   requests: WorkRequest[]
+  messages: ChatMessage[]
+  mailLog: MailLogItem[]
 }

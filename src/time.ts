@@ -165,6 +165,24 @@ export function isoFromDate(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
+export function addDaysIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T12:00:00`)
+  d.setDate(d.getDate() + days)
+  return isoFromDate(d)
+}
+
+export function startOfWeekIso(iso: string): string {
+  const d = new Date(`${iso}T12:00:00`)
+  const mondayOffset = d.getDay() === 0 ? -6 : 1 - d.getDay()
+  d.setDate(d.getDate() + mondayOffset)
+  return isoFromDate(d)
+}
+
+export function weekDates(iso: string): string[] {
+  const start = startOfWeekIso(iso)
+  return Array.from({ length: 7 }, (_, i) => addDaysIso(start, i))
+}
+
 export function calendarDates(weeks = 6): string[] {
   const today = new Date()
   today.setHours(12, 0, 0, 0)

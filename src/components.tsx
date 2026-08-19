@@ -3,14 +3,12 @@ import {
   SLOT_META,
   WEEKDAY_META,
   formatDate,
-  formatDateLong,
+  formatJobDay,
   formatEuro,
   formatHours,
   initials,
   osmEmbedUrl,
-  osmOpenUrl,
   googleMapsDirUrl,
-  appleMapsDirUrl,
   workplaceLine,
   ensureWorkplace,
   CONTRACT_META,
@@ -117,22 +115,20 @@ export function SeekerProfile({
         </div>
         <div className="space-y-5 p-5">
           {seeker.bio && <p className="text-sm leading-relaxed text-muted">{seeker.bio}</p>}
-          <div className="flex flex-wrap gap-1.5 text-[11px] font-medium">
-            {seeker.lastMinute && <span className="badge-accent rounded-md px-2 py-0.5">last-minute</span>}
-            {seeker.hasTransport && <span className="badge-muted rounded-md px-2 py-0.5">eigen vervoer</span>}
-            {seeker.hasLicense && <span className="badge-muted rounded-md px-2 py-0.5">rijbewijs B</span>}
-            <span className="badge-muted rounded-md px-2 py-0.5">vanaf €{seeker.hourlyRateMin}/u</span>
-            <span className="badge-muted rounded-md px-2 py-0.5">{seeker.yearsExperience} jaar ervaring</span>
-          </div>
           {extra}
+          <div className="flex flex-wrap gap-1.5">
+            {seeker.lastMinute && <InfoTag>last-minute</InfoTag>}
+            {seeker.hasTransport && <InfoTag>eigen vervoer</InfoTag>}
+            {seeker.hasLicense && <InfoTag>rijbewijs B</InfoTag>}
+            <InfoTag>vanaf €{seeker.hourlyRateMin}/u</InfoTag>
+            <InfoTag>{seeker.yearsExperience} jaar ervaring</InfoTag>
+          </div>
           {seeker.sectors.length > 0 && (
             <div>
               <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Sectoren</div>
               <div className="flex flex-wrap gap-1.5">
                 {seeker.sectors.map((s) => (
-                  <span key={s} className="rounded-md bg-terra/25 px-2 py-0.5 text-[11px] font-medium">
-                    {s}
-                  </span>
+                  <InfoTag key={s}>{s}</InfoTag>
                 ))}
               </div>
             </div>
@@ -142,9 +138,7 @@ export function SeekerProfile({
               <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Skills</div>
               <div className="flex flex-wrap gap-1.5">
                 {seeker.skills.map((s) => (
-                  <span key={s} className="rounded-md bg-paper px-2 py-0.5 text-[11px] font-medium text-muted">
-                    {s}
-                  </span>
+                  <InfoTag key={s}>{s}</InfoTag>
                 ))}
               </div>
             </div>
@@ -158,7 +152,7 @@ export function SeekerProfile({
           <div>
             <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Vaste week</div>
             <p className="mb-2 text-xs leading-relaxed text-muted">
-              Wanneer deze persoon meestal vrij is. Ochtend 06–12u, namiddag 12–18u, avond 18–00u.
+              Wanneer deze persoon meestal vrij is. Elke kleur is een dagdeel.
             </p>
             <RecurringWeekPreview recurring={seeker.recurring} />
           </div>
@@ -172,10 +166,12 @@ export function OpenSeekerProfile({
   seeker,
   className = '',
   children,
+  extra,
 }: {
   seeker: Seeker
   className?: string
   children: ReactNode
+  extra?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   return (
@@ -183,40 +179,66 @@ export function OpenSeekerProfile({
       <button type="button" className={`cursor-pointer ${className}`} onClick={() => setOpen(true)}>
         {children}
       </button>
-      {open && <SeekerProfile seeker={seeker} onClose={() => setOpen(false)} />}
+      {open && <SeekerProfile seeker={seeker} onClose={() => setOpen(false)} extra={extra} />}
     </>
+  )
+}
+
+export function InfoTag({ children }: { children: ReactNode }) {
+  return (
+    <span className="badge-muted rounded-md px-2 py-0.5 text-[11px] font-medium">{children}</span>
+  )
+}
+
+export function SlotLegend({ className = '' }: { className?: string }) {
+  const slots: Slot[] = ['ochtend', 'namiddag', 'avond', 'flexibel']
+  return (
+    <div
+      className={`flex flex-wrap gap-x-3 gap-y-1.5 ${className}`}
+      role="list"
+      aria-label="Kleurlegende dagdelen"
+    >
+      {slots.map((s) => (
+        <span key={s} className="inline-flex items-center gap-1.5 text-[11px] text-muted" role="listitem">
+          <span className={`slot-${s} h-2.5 w-2.5 shrink-0 rounded-sm`} aria-hidden />
+          <span>
+            {SLOT_META[s].label} {SLOT_META[s].time}
+          </span>
+        </span>
+      ))}
+    </div>
   )
 }
 
 export function RecurringWeekPreview({ recurring }: { recurring: Recurring }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-line">
-      {WEEKDAYS.map((day) => {
-        const slots = recurring[day] ?? []
-        return (
-          <div
-            key={day}
-            className="flex items-center justify-between gap-3 border-b border-line px-3 py-2.5 last:border-b-0"
-          >
-            <div className="w-[5.5rem] shrink-0 text-sm font-semibold">{WEEKDAY_META[day].long}</div>
-            <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-1.5">
-              {slots.length === 0 ? (
-                <span className="text-sm text-muted">Niet vrij</span>
-              ) : (
-                slots.map((s) => (
-                  <span
-                    key={s}
-                    className={`slot-${s} rounded-md px-2 py-0.5 text-[11px] font-medium`}
-                  >
-                    {SLOT_META[s].label}
-                    <span className="ml-1 opacity-75">{SLOT_META[s].time}</span>
-                  </span>
-                ))
-              )}
+    <div>
+      <SlotLegend className="mb-2" />
+      <div className="overflow-hidden rounded-xl border border-line">
+        {WEEKDAYS.map((day) => {
+          const slots = recurring[day] ?? []
+          return (
+            <div
+              key={day}
+              className="flex items-center justify-between gap-3 border-b border-line px-3 py-2.5 last:border-b-0"
+            >
+              <div className="w-[5.5rem] shrink-0 text-sm font-semibold">{WEEKDAY_META[day].long}</div>
+              <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-1.5">
+                {slots.length === 0 ? (
+                  <span className="text-sm text-muted">Niet vrij</span>
+                ) : (
+                  slots.map((s) => (
+                    <span key={s} className={`slot-${s} rounded-md px-2 py-0.5 text-[11px] font-medium`}>
+                      {SLOT_META[s].label}
+                      <span className="ml-1 opacity-75">{SLOT_META[s].time}</span>
+                    </span>
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -228,10 +250,7 @@ export function SlotPills({ slots }: { slots: Slot[] }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {slots.map((s) => (
-        <span
-          key={s}
-          className={`slot-${s} rounded-md px-2 py-0.5 text-[11px] font-medium`}
-        >
+        <span key={s} className={`slot-${s} rounded-md px-2 py-0.5 text-[11px] font-medium`}>
           {SLOT_META[s].label}
         </span>
       ))}
@@ -275,19 +294,26 @@ export function JobWhen({
   endTime?: string
   slots: Slot[]
 }) {
-  const when =
-    startTime && endTime
-      ? `${formatDateLong(date)} · ${startTime}–${endTime === '24:00' ? '24:00' : endTime}`
-      : formatDate(date)
+  const day = formatJobDay(date)
+  const time =
+    startTime && endTime ? `${startTime}–${endTime === '24:00' ? '24:00' : endTime}` : null
   return (
-    <p className="mt-0.5 text-sm text-muted">
-      {when}
-      {!(startTime && endTime) && (
-        <span className="ml-2 inline-block align-middle">
+    <div className="flex flex-wrap items-center gap-2">
+      {day.relative && (
+        <span className="rounded-md bg-terra px-2 py-0.5 text-[11px] font-bold text-ink">{day.relative}</span>
+      )}
+      <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink">
+        <Icon name="cal" className="h-4 w-4 text-terra" />
+        {day.weekday} {day.dayMonth}
+      </span>
+      {time ? (
+        <span className="rounded-md bg-paper px-2 py-0.5 text-sm font-semibold text-ink">{time}</span>
+      ) : (
+        <span className="inline-block align-middle">
           <SlotPills slots={slots} />
         </span>
       )}
-    </p>
+    </div>
   )
 }
 
@@ -398,7 +424,7 @@ export function WorkplaceCard({ workplace }: { workplace: Workplace }) {
             {wp.notes}
           </p>
         )}
-        <div className="flex flex-wrap gap-2">
+        <div>
           <a
             href={googleMapsDirUrl(wp)}
             target="_blank"
@@ -406,23 +432,6 @@ export function WorkplaceCard({ workplace }: { workplace: Workplace }) {
             className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-white"
           >
             Route Google Maps
-          </a>
-          <a
-            href={appleMapsDirUrl(wp)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-xs font-semibold"
-          >
-            Route Apple Kaarten
-          </a>
-          <a
-            href={osmOpenUrl(wp)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink underline decoration-terra decoration-2 underline-offset-4"
-          >
-            OpenStreetMap
-            <Icon name="arrow" className="h-4 w-4" />
           </a>
         </div>
       </div>
@@ -435,11 +444,13 @@ export function JobDetail({
   applied,
   onApply,
   onClose,
+  chat,
 }: {
   job: Job & { score?: number; reasons?: string[]; travel?: string }
   applied?: boolean
   onApply?: (extras: ApplyExtras) => void
   onClose: () => void
+  chat?: ReactNode
 }) {
   const wp = ensureWorkplace(job)
   const [arriveBy, setArriveBy] = useState(job.startTime || '18:00')
@@ -488,6 +499,9 @@ export function JobDetail({
               {job.company} · €{job.hourlyRate}/uur
               {job.travel ? ` · ${job.travel}` : ''}
             </p>
+            <div className="mt-2">
+              <JobWhen date={job.date} startTime={job.startTime} endTime={job.endTime} slots={job.slots} />
+            </div>
           </div>
           <button
             type="button"
@@ -499,7 +513,6 @@ export function JobDetail({
           </button>
         </div>
         <div className="space-y-5 p-5">
-          <JobWhen date={job.date} startTime={job.startTime} endTime={job.endTime} slots={job.slots} />
           <p className="text-sm leading-relaxed text-muted">{job.description}</p>
           <p className="text-xs leading-relaxed text-muted">{CONTRACT_META[kind].hint}</p>
           <BelgianChecklist kind={kind} />
@@ -520,6 +533,7 @@ export function JobDetail({
             ))}
           </div>
           <WorkplaceCard workplace={wp} />
+          {chat}
           {onApply && (
             <form
               className="space-y-3 rounded-xl border border-line bg-paper p-4"
@@ -586,6 +600,7 @@ export function ShiftDetail({
   onOnTheWay,
   onCancel,
   onFeedback,
+  chat,
 }: {
   request: WorkRequest
   workplace: Workplace
@@ -596,6 +611,7 @@ export function ShiftDetail({
   onOnTheWay?: () => void
   onCancel?: (reason: string) => void
   onFeedback?: (fb: ShiftFeedback) => void
+  chat?: ReactNode
 }) {
   const count = shiftCountdown(request.date, request.startTime, request.endTime)
   const [reason, setReason] = useState('')
@@ -760,6 +776,7 @@ export function ShiftDetail({
               />
             </div>
           )}
+          {chat}
         </div>
       </div>
     </div>
@@ -913,6 +930,7 @@ export function SlotToggle({
 
   return (
     <div className="flex flex-col gap-2">
+      <SlotLegend />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {(['ochtend', 'namiddag', 'avond', 'flexibel'] as Slot[]).map((slot) => {
           const on = value.includes(slot)
@@ -960,7 +978,9 @@ export function WeekEditor({
 }) {
   const days: Weekday[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
+    <div>
+      <SlotLegend className="mb-3" />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
       {days.map((day) => (
         <div key={day} className={`${cardClass} p-3.5`}>
           <div className="mb-3 text-sm font-semibold">{WEEKDAY_META[day].long}</div>
@@ -999,6 +1019,7 @@ export function WeekEditor({
           </div>
         </div>
       ))}
+      </div>
     </div>
   )
 }
@@ -1015,7 +1036,9 @@ export function PeriodEditor({
   onReset: (date: string) => void
 }) {
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2">
+    <div>
+      <SlotLegend className="mb-3" />
+      <div className="flex gap-3 overflow-x-auto pb-2">
       {dates.map((date) => {
         const slots = slotsOnDate(seeker, date)
         const overridden = Object.prototype.hasOwnProperty.call(seeker.overrides, date)
@@ -1062,6 +1085,7 @@ export function PeriodEditor({
           </div>
         )
       })}
+      </div>
     </div>
   )
 }

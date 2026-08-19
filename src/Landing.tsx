@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { SEEKERS } from './data'
 import {
   Avatar,
@@ -8,8 +9,10 @@ import {
   RecurringWeekPreview,
   SlotPills,
 } from './components'
-import { Guide, Logo } from './Mascot'
-import type { Slot } from './types'
+import { Logo } from './Mascot'
+import { AuthModal } from './Auth'
+import { useStore } from './store'
+import type { Role, Slot } from './types'
 
 const emma = SEEKERS[0]
 
@@ -29,13 +32,19 @@ export function Landing({
   onDemoEmployer: () => void
   onReset: () => void
 }) {
+  const store = useStore()
+  const [authOpen, setAuthOpen] = useState(false)
+  const [authMode, setAuthMode] = useState<'login' | 'signup' | 'forgot'>('login')
+  const [authRole, setAuthRole] = useState<Role>('seeker')
+  const openAuth = (mode: 'login' | 'signup', role: Role = 'seeker') => {
+    setAuthMode(mode)
+    setAuthRole(role)
+    store.clearAuthNotice()
+    setAuthOpen(true)
+  }
+
   return (
     <div className="relative min-h-dvh overflow-hidden">
-      <Guide
-        pose="wave"
-        title="Hey, ik ben Flexi!"
-        text="Ik help je door FlexiShift. Kies of je een flexijob zoekt of personeel nodig hebt — ik blijf je gidsen."
-      />
       <div className="blob pointer-events-none absolute -left-24 top-40 h-64 w-64 bg-zinc-100" />
       <div className="blob-alt pointer-events-none absolute -right-16 top-[520px] h-72 w-72 bg-zinc-100" />
 
@@ -48,12 +57,12 @@ export function Landing({
           <a href="#hoe" className="hover:text-ink">Hoe het werkt</a>
           <a href="#mensen" className="hover:text-ink">Mensen</a>
         </nav>
-        <div className="flex flex-wrap items-center gap-2">
-          <DarkButton onClick={onDemoSeeker} className="!px-3.5 !py-2 text-xs sm:text-sm">
-            Inloggen als werknemer
+        <div className="flex w-full max-w-sm flex-col items-stretch gap-3 md:w-auto md:max-w-none md:flex-row md:items-center md:gap-2">
+          <DarkButton onClick={() => openAuth('login')} className="w-full py-3.5 text-base md:w-auto md:!px-3.5 md:!py-2 md:text-sm">
+            Inloggen
           </DarkButton>
-          <PrimaryButton onClick={onDemoEmployer} className="!px-3.5 !py-2 text-xs sm:text-sm">
-            Inloggen als werkgever
+          <PrimaryButton onClick={() => openAuth('signup')} className="w-full py-3.5 text-base md:w-auto md:!px-3.5 md:!py-2 md:text-sm">
+            Account aanmaken
           </PrimaryButton>
         </div>
       </header>
@@ -69,11 +78,21 @@ export function Landing({
             Werkgevers vinden wie écht in de buurt is én op dat uur kan.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <DarkButton onClick={onDemoSeeker}>
+            <DarkButton onClick={() => openAuth('signup', 'seeker')}>
               Start als werkzoekende <Icon name="arrow" className="h-4 w-4" />
             </DarkButton>
-            <PrimaryButton onClick={onDemoEmployer}>Ik zoek personeel</PrimaryButton>
+            <PrimaryButton onClick={() => openAuth('signup', 'employer')}>Ik zoek personeel</PrimaryButton>
           </div>
+          <p className="mt-4 text-xs text-muted">
+            Liever eerst kijken?{' '}
+            <button type="button" className="underline hover:text-ink" onClick={onDemoSeeker}>
+              Demo als Emma
+            </button>
+            {' · '}
+            <button type="button" className="underline hover:text-ink" onClick={onDemoEmployer}>
+              Demo als Café De Kroon
+            </button>
+          </p>
         </div>
 
         <div className="relative mx-auto h-[420px] w-full max-w-[440px]">
@@ -316,18 +335,28 @@ export function Landing({
               Vanavond nog iemand vinden — of gevonden worden.
             </h2>
             <p className="mt-4 max-w-lg text-cream/70">
-              Werkende demo, geen account. Open de app als Emma of als Café De Kroon.
+              Maak een echt account. Je data blijft bewaard, en je krijgt e-mail bij aanvragen en berichten.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <PrimaryButton onClick={onDemoSeeker}>Start als Emma</PrimaryButton>
+              <PrimaryButton onClick={() => openAuth('signup', 'seeker')}>Account als werknemer</PrimaryButton>
               <button
                 type="button"
-                onClick={onDemoEmployer}
+                onClick={() => openAuth('signup', 'employer')}
                 className="rounded-lg bg-white px-5 py-3 text-sm font-bold text-ink transition-all hover:-translate-y-0.5"
               >
-                Start als Café De Kroon
+                Account als zaak
               </button>
             </div>
+            <p className="mt-6 text-xs text-cream/50">
+              Demo:{' '}
+              <button type="button" className="underline" onClick={onDemoSeeker}>
+                Emma
+              </button>
+              {' · '}
+              <button type="button" className="underline" onClick={onDemoEmployer}>
+                Café De Kroon
+              </button>
+            </p>
           </div>
         </div>
         <p className="mt-10 text-center text-xs text-muted">
@@ -339,6 +368,14 @@ export function Landing({
           </button>
         </p>
       </section>
+      <AuthModal
+        open={authOpen}
+        mode={authMode}
+        role={authRole}
+        onClose={() => setAuthOpen(false)}
+        onMode={setAuthMode}
+        onRole={setAuthRole}
+      />
     </div>
   )
 }

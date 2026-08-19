@@ -13,6 +13,7 @@ import {
   isDayOpen,
   jobRange,
   rangeFromSlots,
+  isPastDate,
 } from './time'
 import type { DayHours, Job, Seeker, Slot, TimeRange, WorkRequest, Workplace } from './types'
 
@@ -133,6 +134,86 @@ export type JobMatch = Job & {
   reasons: string[]
   distanceKm: number
   travel: string
+  fit: boolean
+}
+
+function missReasons(seeker: Seeker, opts: MatchOpts): string[] {
+  const booked = opts.booked ?? opts.bookedBySeeker?.[seeker.id] ?? []
+  const hours = hoursOnDate(seeker, opts.date, booked)
+  const reasons: string[] = []
+  const needsLicense = opts.requiresLicense || opts.skills.includes('Chauffeur')
+  if (needsLicense && !seeker.hasLicense) reasons.push('Rijbewijs nodig')
+  if (opts.hourlyRate != null && opts.hourlyRate < seeker.hourlyRateMin) {
+    reasons.push(`Jouw minimum is €${seeker.hourlyRateMin}/u`)
+  }
+  if (!isDayOpen(hours)) reasons.push('Die dag sta je niet vrij')
+  else {
+    const needed = jobRange({
+      slots: opts.slots,
+      startTime: opts.startTime ?? '',
+      endTime: opts.endTime ?? '',
+    })
+    const neededFlexible = opts.slots.includes('flexibel')
+    if (!hours.flexible && !neededFlexible && !anyRangeOverlap(hours.ranges, [needed])) {
+      reasons.push(`Jouw uren: ${formatDayHours(hours)}`)
+    }
+  }
+  const km = distanceKm(seeker.city, {
+    city: opts.workplace?.city ?? opts.city,
+    lat: opts.workplace?.lat,
+    lng: opts.workplace?.lng,
+  })
+  const maxKm = seeker.hasTransport ? 90 : 28
+  if (km > maxKm) reasons.push(seeker.hasTransport ? `${Math.round(km)} km verder` : 'Te ver zonder auto')
+  if (reasons.length === 0) reasons.push('Past niet 100%')
+  return reasons
+}
+
+export function jobsForSeeker(
+  seeker: Seeker,
+  jobs: Job[],
+  bookedByDate: Record<string, TimeRange[]> = {},
+): JobMatch[] {
+  return jobs
+    .filter((j) => j.status === 'open' && !isPastDate(j.date))
+    .map((j) => {
+      const opts: MatchOpts = {
+        date: j.date,
+        slots: j.slots,
+        startTime: j.startTime,
+        endTime: j.endTime,
+        skills: j.skills,
+        city: j.city,
+        urgent: j.urgent,
+        workplace: j.workplace,
+        hourlyRate: j.hourlyRate,
+        requiresLicense: j.requiresLicense,
+        booked: bookedByDate[j.date] ?? [],
+      }
+      const m = scoreSeeker(seeker, opts)
+      if (m) {
+        return { ...j, score: m.score, reasons: m.reasons, distanceKm: m.distanceKm, travel: m.travel, fit: true }
+      }
+      const km = distanceKm(seeker.city, {
+        city: j.workplace?.city ?? j.city,
+        lat: j.workplace?.lat,
+        lng: j.workplace?.lng,
+      })
+      return {
+        ...j,
+        score: 0,
+        reasons: missReasons(seeker, opts),
+        distanceKm: km,
+        travel: travelLabel(km, seeker.hasTransport),
+        fit: false,
+      }
+    })
+    .sort((a, b) => {
+      if (a.fit !== b.fit) return a.fit ? -1 : 1
+      if (a.urgent !== b.urgent) return a.urgent ? -1 : 1
+      if (a.fit && b.fit) return b.score - a.score
+      return a.date.localeCompare(b.date)
+    })
 }
 
 export function scoreSeeker(seeker: Seeker, opts: MatchOpts): MatchResult | null {
@@ -194,36 +275,4 @@ export function rankSeekers(seekers: Seeker[], opts: MatchOpts): MatchResult[] {
     .map((s) => scoreSeeker(s, opts))
     .filter((m): m is MatchResult => m !== null)
     .sort((a, b) => b.score - a.score)
-}
-
-export function jobsForSeeker(
-  seeker: Seeker,
-  jobs: Job[],
-  bookedByDate: Record<string, TimeRange[]> = {},
-): JobMatch[] {
-  return jobs
-    .filter((j) => j.status === 'open')
-    .map((j) => {
-      const m = scoreSeeker(seeker, {
-        date: j.date,
-        slots: j.slots,
-        startTime: j.startTime,
-        endTime: j.endTime,
-        skills: j.skills,
-        city: j.city,
-        urgent: j.urgent,
-        workplace: j.workplace,
-        hourlyRate: j.hourlyRate,
-        requiresLicense: j.requiresLicense,
-        booked: bookedByDate[j.date] ?? [],
-      })
-      return m
-        ? { ...j, score: m.score, reasons: m.reasons, distanceKm: m.distanceKm, travel: m.travel }
-        : null
-    })
-    .filter((j): j is JobMatch => j !== null)
-    .sort((a, b) => {
-      if (a.urgent !== b.urgent) return a.urgent ? -1 : 1
-      return b.score - a.score
-    })
 }

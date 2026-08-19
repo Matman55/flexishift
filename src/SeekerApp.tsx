@@ -17,6 +17,7 @@ import {
   inputClass,
 } from './components'
 import { AvailabilityCalendar, type CalendarShift } from './AvailabilityCalendar'
+import { ScheduleCalendar, type ScheduleEvent } from './ScheduleCalendar'
 import {
   CITIES,
   LANGUAGES,
@@ -24,6 +25,7 @@ import {
   SKILLS,
   ensureWorkplace,
   formatDateLong,
+  formatJobDay,
   formatEuro,
   formatHours,
   shiftCountdown,
@@ -31,9 +33,10 @@ import {
   workplaceLine,
 } from './constants'
 import { Logo } from './Landing'
-import { EmptyMascot, Guide, Mascot } from './Mascot'
+import { EmptyMascot, Mascot } from './Mascot'
 import { jobsForSeeker, bookedRangesForSeeker } from './match'
 import { useStore } from './store'
+import { useCelebrate } from './Celebrate'
 import {
   completedShifts,
   currentMonthKey,
@@ -45,7 +48,11 @@ import {
   shiftPay,
   shiftRate,
 } from './earnings'
+import { ChatBox, ChatThread, MailPrefsPanel, JobInquiryChat } from './MailUI'
+import { mailHint, unreadChatCount, defaultMailPrefs } from './notify'
+import { DeleteAccountPanel } from './Auth'
 import type { ApplyExtras, DayHours, Job, Seeker, ShiftFeedback, Slot, Weekday, WorkRequest } from './types'
+import { isChatThread } from './types'
 
 type Tab = 'home' | 'cal' | 'jobs' | 'inbox' | 'profile'
 
@@ -105,6 +112,7 @@ function resizePhoto(file: File): Promise<string> {
 
 export function SeekerApp() {
   const store = useStore()
+  const celebrate = useCelebrate()
   const seeker = store.seekers.find((s) => s.id === store.session?.seekerId)
   const [tab, setTab] = useState<Tab>('home')
   const [toast, setToast] = useState<string | null>(null)
@@ -122,17 +130,40 @@ export function SeekerApp() {
 
   const matches = jobsForSeeker(seeker, store.jobs, bookedRangesForSeeker(store.requests, seeker.id))
   const inbox = store.requests.filter((r) => r.seekerId === seeker.id)
-  const pending = inbox.filter((r) => r.status === 'pending' && r.from === 'employer').length
+  const pending = inbox.filter(
+    (r) => r.status === 'pending' && r.from === 'employer' && !isChatThread(r),
+  ).length
+  const chatUnread = unreadChatCount(
+    store.messages,
+    new Set(inbox.map((r) => r.id)),
+    'seeker',
+  )
+  const inboxBadge = pending + chatUnread
+  const requestedJobIds = new Set(inbox.map((r) => r.jobId).filter(Boolean) as string[])
+  const newJob = matches.find((j) => {
+    if (requestedJobIds.has(j.id)) return false
+    if (!j.postedAt) return false
+    return Date.now() - Date.parse(j.postedAt) < 72 * 60 * 60 * 1000
+  })
   const shifts = inbox
-    .filter((r) => r.status === 'accepted')
+    .filter((r) => r.status === 'accepted' && !isChatThread(r))
     .sort((a, b) => `${a.date}${a.startTime ?? ''}`.localeCompare(`${b.date}${b.startTime ?? ''}`))
   const ping = inbox.find(
     (r) =>
+      !isChatThread(r) &&
       !r.readAt &&
       ((r.from === 'employer' && r.status === 'pending') ||
         r.status === 'accepted' ||
         r.status === 'cancelled'),
   )
+  const chatPing = [...store.messages]
+    .reverse()
+    .find(
+      (m) =>
+        m.from === 'employer' &&
+        !m.readBySeeker &&
+        inbox.some((r) => r.id === m.requestId),
+    )
   const soon = shifts.find((s) => shiftCountdown(s.date, s.startTime, s.endTime).soon)
 
   const sendApply = (job: Job, extras: ApplyExtras) => {
@@ -152,7 +183,12 @@ export function SeekerApp() {
       extras,
       hourlyRate: job.hourlyRate,
     })
-    pingToast('Sollicitatie verstuurd')
+    pingToast(`Sollicitatie verstuurd${mailHint(store, 'apply', 'employer', {
+      seekerId: seeker.id,
+      employerId: job.employerId,
+      title: job.title,
+      date: job.date,
+    })}`)
   }
 
   return (
@@ -162,7 +198,7 @@ export function SeekerApp() {
         if (t === 'inbox') store.markRequestsRead('seeker', seeker.id)
         setTab(t)
       }}
-      pending={pending}
+      pending={inboxBadge}
       onLogout={store.logout}
       toast={toast}
       banner={
@@ -192,6 +228,21 @@ export function SeekerApp() {
               store.markRequestsRead('seeker', seeker.id)
               setTab('inbox')
             }}
+          />
+        ) : chatPing && tab !== 'inbox' ? (
+          <PingBanner
+            title="Nieuw bericht"
+            text={
+              store.requests.find((r) => r.id === chatPing.requestId)?.title ??
+              chatPing.text
+            }
+            onClick={() => setTab('inbox')}
+          />
+        ) : newJob && tab !== 'jobs' ? (
+          <PingBanner
+            title={newJob.fit ? 'Nieuwe job voor jou' : 'Nieuwe job geplaatst'}
+            text={`${newJob.company} · ${newJob.title} · ${formatDateLong(newJob.date)}${newJob.startTime ? ` ${newJob.startTime}–${newJob.endTime}` : ''}`}
+            onClick={() => setTab('jobs')}
           />
         ) : null
       }
@@ -228,7 +279,7 @@ export function SeekerApp() {
         <JobsPane
           seeker={seeker}
           jobs={matches}
-          requested={new Set(inbox.map((r) => r.jobId).filter(Boolean) as string[])}
+          requested={requestedJobIds}
           onApply={sendApply}
         />
       )}
@@ -236,9 +287,18 @@ export function SeekerApp() {
         <InboxPane
           seeker={seeker}
           onStatus={(id, status) => {
+            const req = store.requests.find((r) => r.id === id)
             store.setRequestStatus(id, status)
-            pingToast(status === 'accepted' ? 'Shift bevestigd — hij staat in je kalender' : 'Aanvraag afgewezen')
-            if (status === 'accepted') setTab('cal')
+            const extra = req ? mailHint(store, status, req.from, req) : ''
+            pingToast(
+              (status === 'accepted'
+                ? 'Shift bevestigd — hij staat in je kalender'
+                : 'Aanvraag afgewezen') + extra,
+            )
+            if (status === 'accepted') {
+              celebrate()
+              setTab('cal')
+            }
           }}
         />
       )}
@@ -266,7 +326,7 @@ function Shell({
 }) {
   const items: { id: Tab; label: string; icon: 'home' | 'cal' | 'brief' | 'inbox' | 'user' }[] = [
     { id: 'home', label: 'Home', icon: 'home' },
-    { id: 'cal', label: 'Kalender', icon: 'cal' },
+    { id: 'cal', label: 'Mijn kalender', icon: 'cal' },
     { id: 'jobs', label: 'Jobs', icon: 'brief' },
     { id: 'inbox', label: 'Inbox', icon: 'inbox' },
     { id: 'profile', label: 'Profiel', icon: 'user' },
@@ -314,7 +374,7 @@ function Shell({
             key={it.id}
             type="button"
             onClick={() => setTab(it.id)}
-            className={`relative flex flex-col items-center gap-0.5 text-[11px] font-semibold ${
+            className={`relative flex flex-col items-center gap-0.5 px-0.5 text-center text-[11px] font-semibold leading-tight ${
               tab === it.id ? 'text-terra' : 'text-muted'
             }`}
           >
@@ -346,7 +406,7 @@ function Home({
   onApply,
 }: {
   seeker: Seeker
-  matches: Array<Job & { score: number; reasons?: string[]; travel?: string }>
+  matches: Array<Job & { score: number; reasons?: string[]; travel?: string; fit?: boolean }>
   shifts: WorkRequest[]
   onOpenJobs: () => void
   onOpenCal: () => void
@@ -361,6 +421,7 @@ function Home({
     .filter((s) => s.date.startsWith(currentMonthKey()))
     .reduce((sum, s) => sum + shiftPay(s, store.jobs, seeker.hourlyRateMin), 0)
   const urgent = matches.filter((j) => j.urgent)
+  const fitCount = matches.filter((j) => j.fit !== false).length
   const shiftWp = (r: WorkRequest) => {
     const job = r.jobId ? store.jobs.find((j) => j.id === r.jobId) : undefined
     if (job) return ensureWorkplace(job)
@@ -369,14 +430,9 @@ function Home({
   }
   return (
     <div>
-      <Guide
-        pose="search"
-        title="Jobs die bij jou passen"
-        text="Ik toon hier alleen opdrachten waarvan de uren overlappen met jouw kalender. Tik er één aan als hij past."
-      />
       <p className="text-sm font-medium text-muted">Hallo {seeker.name.split(' ')[0]}</p>
       <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-        {matches.length} jobs passen bij jouw shiften
+        {fitCount} {fitCount === 1 ? 'job past' : 'jobs passen'} bij jouw shiften
       </h1>
       <div className="mt-8 grid grid-cols-3 gap-4">
         <Stat n={upcoming.length} l="shiften" />
@@ -481,7 +537,10 @@ function Home({
       <section className="mt-10">
         <h2 className="text-lg font-semibold tracking-tight">Beste matches</h2>
         <div className="mt-4 space-y-3">
-          {matches.slice(0, 4).map((j) => (
+          {(matches.filter((j) => j.fit !== false).slice(0, 4).length
+            ? matches.filter((j) => j.fit !== false).slice(0, 4)
+            : matches.slice(0, 4)
+          ).map((j) => (
             <JobCard key={j.id} job={j} onApply={(extras) => onApply(j, extras)} />
           ))}
         </div>
@@ -493,6 +552,13 @@ function Home({
           company={store.employers.find((e) => e.id === openShift.employerId)?.company ?? ''}
           earnings={payInfo(openShift, store.jobs, seeker.hourlyRateMin, isCompletedShift(openShift))}
           onClose={() => setOpenShift(null)}
+          chat={
+            <ChatBox
+              requestId={openShift.id}
+              role="seeker"
+              peerName={store.employers.find((e) => e.id === openShift.employerId)?.company ?? 'de zaak'}
+            />
+          }
           {...seekerShiftHandlers(store, openShift, () => setOpenShift(null))}
         />
       )}
@@ -530,7 +596,7 @@ function JobCard({
   onApply,
   applied,
 }: {
-  job: Job & { score?: number; reasons?: string[]; travel?: string }
+  job: Job & { score?: number; reasons?: string[]; travel?: string; fit?: boolean }
   onApply?: (extras: ApplyExtras) => void
   applied?: boolean
 }) {
@@ -552,7 +618,8 @@ function JobCard({
       >
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
+            <JobWhen date={job.date} startTime={job.startTime} endTime={job.endTime} slots={job.slots} />
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <h3 className="font-medium">{job.title}</h3>
               {job.urgent && (
                 <span className="badge-spoed rounded-md px-2 py-0.5 text-[11px] font-medium">
@@ -560,11 +627,15 @@ function JobCard({
                 </span>
               )}
               <ContractBadge kind={job.contractKind ?? 'flexi'} />
+              {job.fit === false && (
+                <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-muted">
+                  uren passen niet 100%
+                </span>
+              )}
             </div>
             <p className="mt-0.5 text-sm text-muted">
               {job.company} · {job.travel ?? job.city}
             </p>
-            <JobWhen date={job.date} startTime={job.startTime} endTime={job.endTime} slots={job.slots} />
           </div>
           <div className="text-right">
             <div className="text-lg font-semibold tracking-tight">€{job.hourlyRate}</div>
@@ -596,7 +667,13 @@ function JobCard({
         )}
       </article>
       {open && (
-        <JobDetail job={job} applied={applied} onApply={onApply} onClose={() => setOpen(false)} />
+        <JobDetail
+          job={job}
+          applied={applied}
+          onApply={onApply}
+          onClose={() => setOpen(false)}
+          chat={<JobInquiryChat job={job} />}
+        />
       )}
     </>
   )
@@ -619,15 +696,10 @@ function CalendarPane({
 }) {
   return (
     <div>
-      <Guide
-        pose="point"
-        title="Jouw week in één oogopslag"
-        text="Geel is vrij, zwart is gepland, groen is al gewerkt. Tik op een dag om uren te zetten of een shift te bekijken."
-      />
       <h1 className="text-3xl font-semibold tracking-tight">Jouw kalender</h1>
       <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">
-        Zie in één keer wanneer je vrij bent, wat nog gepland staat en welke dagen je al
-        gewerkt hebt. Blader terug in de maanden om je geschiedenis te bekijken.
+        Maand voor het overzicht, week en dag voor de details. Tik op een dagnummer om die dag
+        open te trekken.
       </p>
       <label className={`${cardClass} mt-8 flex items-center justify-between p-5`}>
         <div>
@@ -645,9 +717,9 @@ function CalendarPane({
         </button>
       </label>
 
-      <h2 className="mt-10 text-lg font-semibold tracking-tight">Overzicht</h2>
+      <h2 className="mt-10 text-lg font-semibold tracking-tight">Agenda</h2>
       <p className="mb-4 mt-1 text-sm text-muted">
-        Geel is vrij, zwart is gepland, groen zijn dagen die je al gewerkt hebt.
+        Geel is vrij, zwart is gepland, groen is gedaan. Wissel tussen maand, week en dag.
       </p>
       <AvailabilityCalendar
         seeker={seeker}
@@ -674,29 +746,69 @@ function JobsPane({
   onApply,
 }: {
   seeker: Seeker
-  jobs: Array<Job & { score: number; reasons?: string[]; travel?: string }>
+  jobs: Array<Job & { score: number; reasons?: string[]; travel?: string; fit?: boolean }>
   requested: Set<string>
   onApply: (job: Job, extras: ApplyExtras) => void
 }) {
   const [city, setCity] = useState('alle')
   const [onlyUrgent, setOnlyUrgent] = useState(false)
+  const [view, setView] = useState<'cal' | 'list'>('cal')
+  const [openJobId, setOpenJobId] = useState<string | null>(null)
+  const [day, setDay] = useState<string | null>(null)
   const filtered = jobs.filter((j) => {
     if (city !== 'alle' && j.city !== city) return false
     if (onlyUrgent && !j.urgent) return false
     return true
   })
+  const fitCount = filtered.filter((j) => j.fit !== false).length
   const cities = ['alle', ...new Set(jobs.map((j) => j.city))]
+  const events: ScheduleEvent[] = filtered.map((j) => ({
+    id: j.id,
+    date: j.date,
+    title: j.title,
+    subtitle: `${j.company} · ${j.startTime}–${j.endTime} · €${j.hourlyRate}/u${j.urgent ? ' · spoed' : ''}`,
+    startTime: j.startTime,
+    endTime: j.endTime,
+    tone: requested.has(j.id) ? 'asked' : 'free',
+    kind: 'job',
+  }))
+  const openJob = filtered.find((j) => j.id === openJobId) ?? jobs.find((j) => j.id === openJobId)
+  const dayJobs = day ? filtered.filter((j) => j.date === day) : []
+  const dayMeta = day ? formatJobDay(day) : null
+
   return (
     <div>
-      <Guide
-        pose="search"
-        title="Opdrachten voor jou"
-        text="Ik filter al op jouw kalender. Staat er niks? Zet extra uren open of kijk in een andere stad."
-      />
-      <h1 className="text-3xl font-semibold tracking-tight">Opdrachten voor jou</h1>
-      <p className="mt-2 text-sm text-muted">
-        Alleen jobs waarvan de uren overlappen met {seeker.name.split(' ')[0]}’s beschikbaarheid.
-      </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">Opdrachten voor jou</h1>
+          <p className="mt-2 text-sm text-muted">
+            {fitCount} {fitCount === 1 ? 'job past' : 'jobs passen'} bij de uren van{' '}
+            {seeker.name.split(' ')[0]}
+            {filtered.length > fitCount ? ` · ${filtered.length} open in totaal` : ''}. Tik een dag
+            aan voor alle jobs van die dag.
+          </p>
+        </div>
+        <div className="inline-flex rounded-lg border border-line p-0.5">
+          <button
+            type="button"
+            onClick={() => setView('cal')}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+              view === 'cal' ? 'bg-ink text-white' : 'text-muted hover:text-ink'
+            }`}
+          >
+            Kalender
+          </button>
+          <button
+            type="button"
+            onClick={() => setView('list')}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+              view === 'list' ? 'bg-ink text-white' : 'text-muted hover:text-ink'
+            }`}
+          >
+            Lijst
+          </button>
+        </div>
+      </div>
       <div className="mt-6 flex flex-wrap gap-2">
         {cities.map((c) => (
           <Chip key={c} active={city === c} onClick={() => setCity(c)}>
@@ -707,23 +819,120 @@ function JobsPane({
           Alleen spoed
         </Chip>
       </div>
-      <div className="mt-5 space-y-3">
+      {view === 'cal' && (
+        <div className="mt-5">
+          {filtered.length === 0 ? (
+            <EmptyMascot
+              pose="search"
+              title="Nog geen jobs"
+              text="Zodra een zaak een opdracht plaatst, zie je die hier — ook als de uren niet 100% matchen."
+            />
+          ) : (
+            <ScheduleCalendar
+              events={events}
+              defaultView="month"
+              legend={[
+                { swatch: 'bg-terra/40 border-terra/50', label: 'Open job' },
+                { swatch: 'bg-white border-ink', label: 'Al gesolliciteerd' },
+              ]}
+              onSelectDay={setDay}
+              onSelectEvent={setOpenJobId}
+            />
+          )}
+          {day && dayMeta && (
+            <section className="mt-6">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="flex flex-wrap items-center gap-2 text-base font-semibold tracking-tight">
+                  {dayMeta.relative && (
+                    <span className="rounded-md bg-terra px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide">
+                      {dayMeta.relative}
+                    </span>
+                  )}
+                  <span>
+                    {dayMeta.weekday} {dayMeta.dayMonth}
+                  </span>
+                  <span className="text-sm font-medium text-muted">
+                    · {dayJobs.length} {dayJobs.length === 1 ? 'job' : 'jobs'}
+                  </span>
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setDay(null)}
+                  className="text-sm font-medium text-muted hover:text-ink"
+                >
+                  Sluiten
+                </button>
+              </div>
+              {dayJobs.length === 0 ? (
+                <p className="rounded-2xl border border-dashed border-line bg-zinc-50 px-4 py-6 text-sm text-muted">
+                  Geen beschikbare jobs op deze dag.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {dayJobs.map((j) => (
+                    <JobCard
+                      key={j.id}
+                      job={j}
+                      applied={requested.has(j.id)}
+                      onApply={requested.has(j.id) ? undefined : (extras) => onApply(j, extras)}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+        </div>
+      )}
+      {view === 'list' && (
+      <div className="mt-5 space-y-6">
         {filtered.length === 0 && (
-          <EmptyMascot
-            pose="search"
-            title="Nog geen match"
-            text="Geen jobs in dit filter. Zet extra uren open of kijk in een andere stad — ik zoek opnieuw."
-          />
+            <EmptyMascot
+              pose="search"
+              title="Nog geen jobs"
+              text="Zodra een zaak een opdracht plaatst, zie je die hier — ook als de uren niet 100% matchen."
+            />
         )}
-        {filtered.map((j) => (
-          <JobCard
-            key={j.id}
-            job={j}
-            applied={requested.has(j.id)}
-            onApply={requested.has(j.id) ? undefined : (extras) => onApply(j, extras)}
-          />
-        ))}
+        {[...new Set(filtered.map((j) => j.date))]
+          .sort()
+          .map((date) => {
+            const day = formatJobDay(date)
+            const ofDay = filtered.filter((j) => j.date === date)
+            return (
+              <section key={date}>
+                <h2 className="mb-3 flex flex-wrap items-center gap-2 text-base font-semibold tracking-tight">
+                  {day.relative && (
+                    <span className="rounded-md bg-terra px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide">
+                      {day.relative}
+                    </span>
+                  )}
+                  <span>
+                    {day.weekday} {day.dayMonth}
+                  </span>
+                </h2>
+                <div className="space-y-3">
+                  {ofDay.map((j) => (
+                    <JobCard
+                      key={j.id}
+                      job={j}
+                      applied={requested.has(j.id)}
+                      onApply={requested.has(j.id) ? undefined : (extras) => onApply(j, extras)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )
+          })}
       </div>
+      )}
+      {openJob && (
+        <JobDetail
+          job={openJob}
+          applied={requested.has(openJob.id)}
+          onApply={requested.has(openJob.id) ? undefined : (extras) => onApply(openJob, extras)}
+          onClose={() => setOpenJobId(null)}
+          chat={<JobInquiryChat job={openJob} />}
+        />
+      )}
     </div>
   )
 }
@@ -736,9 +945,16 @@ function InboxPane({
   onStatus: (id: string, status: 'accepted' | 'declined') => void
 }) {
   const store = useStore()
-  const items = store.requests.filter(
-    (r) => r.seekerId === seeker.id && !(r.status === 'accepted' && isCompletedShift(r)),
-  )
+  const items = store.requests
+    .filter((r) => r.seekerId === seeker.id)
+    .slice()
+    .sort((a, b) => {
+      const lastAt = (r: WorkRequest) => {
+        const msgs = store.messages.filter((m) => m.requestId === r.id)
+        return msgs[msgs.length - 1]?.createdAt ?? r.createdAt
+      }
+      return lastAt(b).localeCompare(lastAt(a))
+    })
   const [openShift, setOpenShift] = useState<WorkRequest | null>(null)
   const wpFor = (r: WorkRequest) => {
     const job = r.jobId ? store.jobs.find((j) => j.id === r.jobId) : undefined
@@ -751,18 +967,13 @@ function InboxPane({
     : null
   return (
     <div>
-      <Guide
-        pose="hint"
-        title="Jouw inbox"
-        text="Hier komen aanvragen van werkgevers. Jij beslist of je de shift doet."
-      />
       <h1 className="text-3xl font-semibold tracking-tight">Inbox</h1>
       <div className="mt-6 space-y-3">
         {items.length === 0 && (
           <EmptyMascot
             pose="idle"
             title="Nog stil hier"
-            text="Zodra een zaak je vraagt, zie je het hier. Ik geef je een seintje."
+            text="Zodra een zaak je vraagt of jij solliciteert, kun je hier berichten sturen."
           />
         )}
         {items.map((r) => {
@@ -773,22 +984,32 @@ function InboxPane({
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-xs font-medium text-muted">
-                    {r.from === 'employer' ? 'Aanvraag van werkgever' : 'Jouw sollicitatie'}
+                    {isChatThread(r)
+                      ? 'Bericht'
+                      : r.from === 'employer'
+                        ? 'Aanvraag van werkgever'
+                        : 'Jouw sollicitatie'}
                   </div>
                   <h3 className="mt-1 font-medium">{r.title}</h3>
+                  {!isChatThread(r) && (
                   <p className="text-sm text-muted">
                     {emp?.company} · {formatDateLong(r.date)} · {count.label}
                   </p>
+                  )}
+                  {isChatThread(r) && (
+                    <p className="text-sm text-muted">{emp?.company}</p>
+                  )}
                 </div>
-                <StatusBadge status={r.status} />
+                {!isChatThread(r) && <StatusBadge status={r.status} />}
               </div>
-              <p className="mt-4 text-sm leading-relaxed text-muted">{r.message}</p>
+              {r.message ? <p className="mt-4 text-sm leading-relaxed text-muted">{r.message}</p> : null}
               {r.extras && (
                 <p className="mt-2 text-xs text-muted">
                   Aankomst {r.extras.arriveBy} · {r.extras.transport}
                   {r.extras.question ? ` · ${r.extras.question}` : ''}
                 </p>
               )}
+              {!isChatThread(r) && (
               <div className="mt-2">
                 {r.startTime && r.endTime ? (
                   <span className="rounded-md bg-terra/30 px-2 py-0.5 text-[11px] font-semibold">
@@ -798,7 +1019,8 @@ function InboxPane({
                   <SlotPills slots={r.slots} />
                 )}
               </div>
-              {r.status === 'pending' && r.from === 'employer' && (
+              )}
+              {r.status === 'pending' && r.from === 'employer' && !isChatThread(r) && (
                 <div className="mt-4 flex gap-2">
                   <PrimaryButton onClick={() => onStatus(r.id, 'accepted')} className="!py-2.5">
                     Ik doe het
@@ -808,10 +1030,17 @@ function InboxPane({
                   </GhostButton>
                 </div>
               )}
-              {(r.status === 'accepted' || r.status === 'cancelled') && (
+              {(r.status === 'accepted' || r.status === 'cancelled') && !isChatThread(r) && (
                 <GhostButton onClick={() => setOpenShift(r)} className="mt-4 !py-2.5">
                   Open shiftkaart
                 </GhostButton>
+              )}
+              {emp && (
+                <ChatThread
+                  requestId={r.id}
+                  role="seeker"
+                  peerName={emp.company}
+                />
               )}
             </article>
           )
@@ -824,6 +1053,13 @@ function InboxPane({
           company={store.employers.find((e) => e.id === liveShift.employerId)?.company ?? ''}
           earnings={payInfo(liveShift, store.jobs, seeker.hourlyRateMin, isCompletedShift(liveShift))}
           onClose={() => setOpenShift(null)}
+          chat={
+            <ChatBox
+              requestId={liveShift.id}
+              role="seeker"
+              peerName={store.employers.find((e) => e.id === liveShift.employerId)?.company ?? 'de zaak'}
+            />
+          }
           {...seekerShiftHandlers(store, liveShift, () => setOpenShift(null))}
         />
       )}
@@ -851,13 +1087,6 @@ function HistoryPane({ seeker, nested }: { seeker: Seeker; nested?: boolean }) {
 
   return (
     <div>
-      {!nested && (
-        <Guide
-          pose="point"
-          title="Jouw jobs en loon"
-          text="Elke afgeronde shift blijft hier staan. Tik een maand aan om te zien wat je toen verdiende."
-        />
-      )}
       {nested ? (
         <h2 className="mt-10 text-lg font-semibold tracking-tight">Gedaan en loon</h2>
       ) : (
@@ -983,6 +1212,13 @@ function HistoryPane({ seeker, nested }: { seeker: Seeker; nested?: boolean }) {
           company={store.employers.find((e) => e.id === openShift.employerId)?.company ?? ''}
           earnings={payInfo(openShift, store.jobs, seeker.hourlyRateMin, true)}
           onClose={() => setOpenShift(null)}
+          chat={
+            <ChatBox
+              requestId={openShift.id}
+              role="seeker"
+              peerName={store.employers.find((e) => e.id === openShift.employerId)?.company ?? 'de zaak'}
+            />
+          }
           {...seekerShiftHandlers(store, openShift, () => setOpenShift(null))}
         />
       )}
@@ -1018,11 +1254,6 @@ function ProfilePane({ seeker }: { seeker: Seeker }) {
   }
   return (
     <div>
-      <Guide
-        pose="idle"
-        title="Jouw profiel"
-        text="Vul skills, stad en een korte bio in. Hoe completer, hoe beter werkgevers je vinden."
-      />
       <div className={`${cardClass} p-6`}>
         <div className="flex items-center gap-4">
           <Avatar name={draft.name} hue={draft.hue} size="lg" photo={draft.photo} />
@@ -1147,6 +1378,19 @@ function ProfilePane({ seeker }: { seeker: Seeker }) {
         </div>
         <PrimaryButton onClick={save}>Profiel opslaan</PrimaryButton>
       </div>
+      <div className="mt-4">
+        <MailPrefsPanel
+          role="seeker"
+          email={seeker.email ?? ''}
+          prefs={seeker.mailPrefs ?? defaultMailPrefs()}
+          onEmail={(email) => store.updateSeeker(seeker.id, { email })}
+          onPrefs={(mailPrefs) => store.updateSeeker(seeker.id, { mailPrefs })}
+          log={store.mailLog}
+        />
+      </div>
+      <div className="mt-4">
+        <DeleteAccountPanel />
+      </div>
     </div>
   )
 }
@@ -1213,6 +1457,15 @@ function Onboarding({ seeker }: { seeker: Seeker }) {
               placeholder="Ik werk in shiften en zoek extra horeca-werk op mijn vrije avonden…"
               value={draft.bio}
               onChange={(e) => setDraft({ ...draft, bio: e.target.value })}
+            />
+          </Field>
+          <Field label="E-mail (voor meldingen)">
+            <input
+              type="email"
+              className={inputClass}
+              value={draft.email ?? ''}
+              placeholder="emma@voorbeeld.be"
+              onChange={(e) => setDraft({ ...draft, email: e.target.value })}
             />
           </Field>
         </div>
@@ -1319,7 +1572,6 @@ function Onboarding({ seeker }: { seeker: Seeker }) {
 
   return (
     <div className="min-h-dvh px-6 py-10">
-      <Guide {...onboardTips[step]} />
       <div className="mx-auto max-w-2xl">
         <Logo compact />
         <div className="mt-8 flex gap-2">

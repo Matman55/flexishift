@@ -1,5 +1,3 @@
-import { useEffect, useState, type ReactNode } from 'react'
-
 export type MascotPose = 'search' | 'wave' | 'point' | 'celebrate' | 'idle' | 'hint'
 
 export function Mascot({
@@ -129,57 +127,12 @@ export function Logo({
 }) {
   return (
     <img
-      src={`${import.meta.env.BASE_URL}logo.png?v=2`}
+      src={`${import.meta.env.BASE_URL}logo.png?v=3`}
       alt="FlexiShift"
       className="block w-auto max-w-[min(100%,36rem)] bg-transparent object-contain object-left"
       style={{ height: compact ? 140 : 168, backgroundColor: 'transparent' }}
     />
   )
-}
-
-type Tip = { pose: MascotPose; title?: string; text: string }
-
-let setTipFn: ((tip: Tip | null) => void) | null = null
-
-export function GuideProvider({ children }: { children: ReactNode }) {
-  const [tip, setTip] = useState<Tip | null>(null)
-  const [open, setOpen] = useState(true)
-  setTipFn = setTip
-
-  return (
-    <>
-      {children}
-      {tip && (
-        <div className="pointer-events-none fixed bottom-24 right-3 z-40 flex items-end gap-2 md:bottom-6 md:right-6">
-          {open && (
-            <div className="pointer-events-auto mb-3 max-w-[230px] rounded-2xl border border-line bg-white px-3.5 py-3 shadow-[0_12px_40px_rgba(17,17,17,0.14)]">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-terra">
-                Flexi, je assistent
-              </div>
-              {tip.title && <div className="mt-0.5 text-sm font-bold">{tip.title}</div>}
-              <p className="mt-1 text-sm leading-snug text-muted">{tip.text}</p>
-            </div>
-          )}
-          <button
-            type="button"
-            className="pointer-events-auto shrink-0"
-            onClick={() => setOpen((v) => !v)}
-            aria-label={open ? 'Tip sluiten' : 'Tip openen'}
-          >
-            <Mascot pose={tip.pose} size={92} bob />
-          </button>
-        </div>
-      )}
-    </>
-  )
-}
-
-export function Guide({ pose, title, text }: Tip) {
-  useEffect(() => {
-    setTipFn?.({ pose, title, text })
-    return () => setTipFn?.(null)
-  }, [pose, title, text])
-  return null
 }
 
 export function EmptyMascot({

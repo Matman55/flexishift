@@ -116,6 +116,23 @@ export function formatDateLong(iso: string): string {
   })
 }
 
+export function formatJobDay(iso: string): {
+  relative: string | null
+  weekday: string
+  dayMonth: string
+  label: string
+} {
+  const today = isoDate(0)
+  const tomorrow = isoDate(1)
+  const d = new Date(iso + 'T12:00:00')
+  const rawWeekday = d.toLocaleDateString('nl-BE', { weekday: 'long' })
+  const weekday = rawWeekday.charAt(0).toUpperCase() + rawWeekday.slice(1)
+  const dayMonth = d.toLocaleDateString('nl-BE', { day: 'numeric', month: 'long' })
+  const relative = iso === today ? 'Vandaag' : iso === tomorrow ? 'Morgen' : null
+  const label = relative ? `${relative} · ${weekday} ${dayMonth}` : `${weekday} ${dayMonth}`
+  return { relative, weekday, dayMonth, label }
+}
+
 export function initials(name: string): string {
   return name
     .split(' ')
@@ -187,16 +204,8 @@ export function osmEmbedUrl(lat: number, lng: number, delta = 0.007): string {
   return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat.toFixed(6)}%2C${lng.toFixed(6)}`
 }
 
-export function osmOpenUrl(wp: Workplace): string {
-  return `https://www.openstreetmap.org/?mlat=${wp.lat}&mlon=${wp.lng}#map=17/${wp.lat}/${wp.lng}`
-}
-
 export function googleMapsDirUrl(wp: Workplace): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${wp.lat},${wp.lng}`
-}
-
-export function appleMapsDirUrl(wp: Workplace): string {
-  return `https://maps.apple.com/?daddr=${wp.lat},${wp.lng}`
 }
 
 export function workplaceLine(wp: Workplace): string {

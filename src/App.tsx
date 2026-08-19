@@ -2,10 +2,13 @@ import { StoreProvider, useStore } from './store'
 import { Landing } from './Landing'
 import { SeekerApp } from './SeekerApp'
 import { EmployerApp } from './EmployerApp'
-import { GuideProvider } from './Mascot'
+import { CelebrateProvider } from './Celebrate'
+import { PasswordRecovery, Splash } from './Auth'
 
 function Gate() {
   const store = useStore()
+  if (!store.ready) return <Splash />
+  if (store.needsPassword) return <PasswordRecovery />
   if (store.session?.role === 'seeker') return <SeekerApp />
   if (store.session?.role === 'employer') return <EmployerApp />
   return (
@@ -20,9 +23,9 @@ function Gate() {
 export default function App() {
   return (
     <StoreProvider>
-      <GuideProvider>
+      <CelebrateProvider>
         <Gate />
-      </GuideProvider>
+      </CelebrateProvider>
     </StoreProvider>
   )
 }
