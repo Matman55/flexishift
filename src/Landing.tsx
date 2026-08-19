@@ -55,6 +55,7 @@ export function Landing({
             Home
           </span>
           <a href="#hoe" className="hover:text-ink">Hoe het werkt</a>
+          <a href="#wie" className="hover:text-ink">Wie mag een flexi-job?</a>
           <a href="#mensen" className="hover:text-ink">Mensen</a>
         </nav>
         <div className="flex w-full max-w-sm flex-col items-stretch gap-3 md:w-auto md:max-w-none md:flex-row md:items-center md:gap-2">
@@ -108,6 +109,61 @@ export function Landing({
             />
           </div>
         </div>
+      </section>
+
+      <section id="wie" className="relative z-10 mx-auto max-w-6xl px-6 py-8 md:py-16">
+        <p className="font-script text-3xl text-terra">Eerst dit</p>
+        <h2 className="text-3xl font-extrabold tracking-tight">Wie mag een flexi-job doen?</h2>
+        <p className="mt-4 max-w-2xl leading-relaxed text-muted">
+          Een flexi-job is een Belgisch statuut: extra werk naast een hoofdjob, of als gepensioneerde.
+          Niet iedereen mag dat. De RSZ controleert dit via Dimona — FlexiShift matcht alleen mensen en shiften.
+        </p>
+        <div className="mt-8 grid gap-4 md:grid-cols-2">
+          <div className="rounded-2xl border border-line bg-white p-6 shadow-[0_10px_30px_rgba(17,17,17,0.06)]">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">Jij mag, als</div>
+            <h3 className="mt-1 text-xl font-bold tracking-tight">Dit klopt voor jou</h3>
+            <ul className="mt-5 space-y-3 text-sm leading-relaxed">
+              {[
+                'Je werkt al minstens 4/5 (80%) als werknemer, bij één of meer andere werkgevers.',
+                'Dat 4/5-werk telde in het derde kwartaal vóór de flexi-job (voorbeeld: flexi in april–juni → je werkte 4/5 in juli–september het jaar voordien).',
+                'Je bent gepensioneerd en staat in het pensioenkadaster in het kwartaal van de flexi-job. Dan vervalt de 4/5-regel.',
+                'Je bent 18 of ouder.',
+              ].map((t) => (
+                <li key={t} className="flex items-start gap-3">
+                  <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-terra">
+                    <Icon name="check" className="h-3.5 w-3.5" />
+                  </span>
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="rounded-2xl border border-line bg-white p-6 shadow-[0_10px_30px_rgba(17,17,17,0.06)]">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">Meestal niet</div>
+            <h3 className="mt-1 text-xl font-bold tracking-tight">Dit volstaat niet</h3>
+            <ul className="mt-5 space-y-3 text-sm leading-relaxed">
+              {[
+                'Student: daarvoor bestaat studentenarbeid, geen flexi-job.',
+                'Zelfstandige: je kunt (nog) geen flexi-job doen.',
+                'Werkloos of zonder die 4/5-hoofdjob: dan val je buiten het statuut.',
+                'Dezelfde werkgever waar je in dat kwartaal al een gewoon contract hebt.',
+                'Net van voltijds naar 4/5 gegaan: er geldt een wachtperiode (derde en vierde kwartaal na de vermindering).',
+              ].map((t) => (
+                <li key={t} className="flex items-start gap-3">
+                  <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-ink text-white">
+                    <Icon name="x" className="h-3.5 w-3.5" />
+                  </span>
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        <p className="mt-6 max-w-3xl text-sm leading-relaxed text-muted">
+          Extra’s: tot €18.440 flexi-inkomen in 2026 is voor wie 4/5 werkt meestal belastingvrij; daarboven gelden
+          normale regels. Gepensioneerden verdienen meestal onbeperkt belastingvrij bij — bij vervroegd pensioen
+          kunnen inkomensgrenzen je pensioen beïnvloeden. De zaak doet Dimona; FlexiShift is geen juridisch advies.
+        </p>
       </section>
 
       <section className="relative z-10 mx-auto max-w-6xl px-6 py-16">
@@ -360,9 +416,11 @@ export function Landing({
           </div>
         </div>
         <p className="mt-10 text-center text-xs text-muted">
-          Flexi-jobs in België zijn bedoeld voor wie al een hoofdjob heeft (vaak 4/5 of meer),
-          gepensioneerden en sommige andere statuten. FlexiShift is een matchingtool, geen
-          juridisch advies.{' '}
+          FlexiShift is een matchingtool, geen juridisch advies.{' '}
+          <a href="#wie" className="underline hover:text-ink">
+            Wie mag een flexi-job?
+          </a>
+          {' · '}
           <button type="button" onClick={onReset} className="underline hover:text-ink">
             Demo resetten
           </button>
